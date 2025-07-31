@@ -10,7 +10,26 @@ This is the **shmocker** project - a rootless Docker-image builder designed as a
 
 ### Agent Orchestration
 
-You are the orchestrator and should coordinate between specialized expert agents:
+You are the orchestrator and should coordinate between specialized expert agents.
+
+#### Orchestrator Responsibilities:
+1. **Break down work into atomic tasks** before assigning to agents
+2. **Instruct each agent** to commit after each distinct unit of work
+3. **Review agent work** and ensure proper commit granularity
+4. **Example agent instruction**:
+   ```
+   "Please implement the Dockerfile parser. Break this into:
+   1. Create lexer.go and commit
+   2. Implement tokenization logic and commit
+   3. Create parser.go and commit
+   4. Implement parsing logic and commit
+   5. Create tests for lexer and commit
+   6. Create tests for parser and commit
+   
+   Each step should be a separate commit with a descriptive message."
+   ```
+
+Specialized expert agents:
 
 1. **Architect Agent** - Controls overall flow, interfaces, and model definitions
 2. **Layer-Specific Agents** - One for each application layer requiring specific expertise
@@ -21,7 +40,41 @@ You are the orchestrator and should coordinate between specialized expert agents
 
 ### Version Control
 
-Create a commit immediately after completing each task to maintain a clear development journal. Use descriptive commit messages that explain what was accomplished.
+**CRITICAL**: Each agent MUST commit after EVERY distinct unit of work. This creates a clear development journal with atomic, revertible changes.
+
+#### Commit Guidelines for All Agents:
+1. **One Task = One Commit**: Each distinct task gets its own commit
+   - Creating a new file → commit
+   - Implementing a function/interface → commit
+   - Fixing a bug → commit
+   - Adding tests → commit
+   - Updating documentation → commit
+
+2. **Commit Message Format**:
+   ```
+   type(scope): brief description
+   
+   - Detailed bullet points if needed
+   - What was changed and why
+   ```
+   Types: feat, fix, docs, test, refactor, style, chore
+
+3. **Examples of Distinct Units**:
+   - Creating go.mod → `chore: Initialize Go module`
+   - Creating directory structure → `feat: Add project directory structure`
+   - Implementing parser lexer → `feat(parser): Implement lexer tokenization`
+   - Adding lexer tests → `test(parser): Add lexer unit tests`
+   - Fixing parser bug → `fix(parser): Handle line continuations correctly`
+
+4. **Agent Instructions Template**:
+   When creating an agent, include:
+   ```
+   IMPORTANT: You MUST commit after completing each distinct task:
+   - Use 'git add <specific-files>' for the files you just created/modified
+   - Use descriptive commit messages following conventional commits
+   - One logical change per commit (don't bundle unrelated changes)
+   - If you create 5 files for different purposes, that might be 5 commits
+   ```
 
 ## Technical Requirements
 
