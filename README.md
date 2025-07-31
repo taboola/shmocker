@@ -44,6 +44,7 @@ shmocker/
 - Go 1.21 or later (because staying current is for try-hards)
 - Make (the tool that makes other tools)
 - An inexplicable desire to avoid using Docker to build Docker images
+- **macOS Users**: Lima VM (don't worry, we automated this because reading Lima docs is harder than reinventing Docker)
 
 ### Build Commands
 
@@ -90,6 +91,26 @@ shmocker build --sbom -t myimage:latest /path/to/build/context
 # Build and sign the image (cryptographically guarantee it's our fault)
 shmocker build --sign -t myimage:latest /path/to/build/context
 ```
+
+## macOS Support (Or: VMs All The Way Down)
+
+Since BuildKit refuses to run on macOS (something about "kernel features"), we've wrapped a VM in a wrapper in a CLI tool. It's like Docker Desktop, but with more steps and less licensing fees:
+
+```bash
+# One-time setup (downloads Ubuntu, because of course it does)
+./scripts/setup-macos.sh
+
+# Start your personal Linux (when you need to build)
+./scripts/lima-vm.sh start
+
+# Build "natively" (through a VM, ssh, and TCP forwarding)
+shmocker build -t my-containerized-disappointment:latest .
+
+# Stop the VM (save those precious macOS resources)
+./scripts/lima-vm.sh stop
+```
+
+See [macOS Setup Guide](docs/MACOS_SETUP.md) if you enjoy reading about networking layers and socket forwarding.
 
 ## Configuration (Because Simple Things Must Be Complex)
 
