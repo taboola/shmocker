@@ -25,11 +25,6 @@ type ClientImpl struct {
 	auth       AuthProvider
 }
 
-// AuthProviderImpl implements the AuthProvider interface.
-type AuthProviderImpl struct {
-	credentials map[string]*Credentials
-	tokens      map[string]*Token
-}
 
 // BlobStoreImpl implements the BlobStore interface.
 type BlobStoreImpl struct {
@@ -79,10 +74,18 @@ func New(config *Config) (Client, error) {
 		Timeout:   config.Timeout,
 	}
 
-	// Create auth provider
-	authProvider := &AuthProviderImpl{
-		credentials: make(map[string]*Credentials),
-		tokens:      make(map[string]*Token),
+	// Create enhanced auth provider
+	authConfig := &AuthConfig{
+		InsecureRegistries: []string{},
+	}
+	if config.Insecure {
+		// Add common insecure registries if insecure mode is enabled
+		authConfig.InsecureRegistries = []string{"localhost", "127.0.0.1", "0.0.0.0"}
+	}
+	
+	authProvider, err := NewRegistryAuthProvider(authConfig)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create auth provider")
 	}
 
 	return &ClientImpl{
@@ -692,32 +695,6 @@ func (c *ClientImpl) addAuth(req *http.Request, registryURL string) error {
 	return nil
 }
 
-// AuthProvider implementation
-
-// GetCredentials returns credentials for the given registry.
-func (a *AuthProviderImpl) GetCredentials(ctx context.Context, registry string) (*Credentials, error) {
-	if creds, exists := a.credentials[registry]; exists {
-		return creds, nil
-	}
-	return nil, errors.New("no credentials found")
-}
-
-// RefreshToken refreshes an access token if needed.
-func (a *AuthProviderImpl) RefreshToken(ctx context.Context, registry string) (*Token, error) {
-	// TODO: Implement token refresh logic for OAuth2 flows
-	return nil, errors.New("token refresh not implemented")
-}
-
-// ClearCredentials clears cached credentials for a registry.
-func (a *AuthProviderImpl) ClearCredentials(registry string) {
-	delete(a.credentials, registry)
-	delete(a.tokens, registry)
-}
-
-// SetCredentials sets credentials for a registry.
-func (a *AuthProviderImpl) SetCredentials(registry string, creds *Credentials) {
-	a.credentials[registry] = creds
-}
 
 // BlobStore implementation
 
