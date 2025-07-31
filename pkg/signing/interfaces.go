@@ -4,7 +4,6 @@ package signing
 import (
 	"context"
 	"crypto"
-	"io"
 	"time"
 )
 
@@ -118,6 +117,9 @@ type SignRequest struct {
 
 // SignOptions contains options for signing operations.
 type SignOptions struct {
+	// KeyRef is the reference to the signing key
+	KeyRef string `json:"key_ref,omitempty"`
+	
 	// KeyType specifies the key type to use
 	KeyType KeyType `json:"key_type,omitempty"`
 	

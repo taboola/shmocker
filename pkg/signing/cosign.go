@@ -56,9 +56,6 @@ func NewCosignSigner(keyProvider KeyProvider, opts *CosignOptions) *CosignSigner
 		}
 	}
 	
-	if opts.RegistryOptions == nil {
-		opts.RegistryOptions = &options.RegistryOptions{}
-	}
 	
 	return &CosignSigner{
 		keyProvider: keyProvider,
@@ -128,6 +125,10 @@ func (s *CosignSigner) Sign(ctx context.Context, req *SignRequest) (*SignResult,
 func (s *CosignSigner) SignBlob(ctx context.Context, data []byte, opts *SignOptions) (*Signature, error) {
 	if opts == nil {
 		return nil, fmt.Errorf("sign options cannot be nil")
+	}
+	
+	if opts.KeyRef == "" {
+		return nil, fmt.Errorf("key reference cannot be empty")
 	}
 	
 	// Get the private key
@@ -262,7 +263,11 @@ func (v *CosignVerifier) Verify(ctx context.Context, req *VerifyRequest) (*Verif
 	// Create image reference with digest if provided
 	imageRef := req.ImageRef
 	if req.ImageDigest != "" {
-		imageRef = fmt.Sprintf("%s@%s", req.ImageRef, req.ImageDigest)
+		// Remove tag if present when adding digest
+		if idx := strings.LastIndex(imageRef, ":"); idx > 0 && !strings.Contains(imageRef[idx:], "/") {
+			imageRef = imageRef[:idx]
+		}
+		imageRef = fmt.Sprintf("%s@%s", imageRef, req.ImageDigest)
 	}
 	
 	// For now, implement basic verification logic
