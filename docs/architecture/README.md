@@ -1,64 +1,64 @@
-# Shmocker Architecture Overview
+# Shmocker Architecture Overview: A Monument to Over-Engineering
 
-This document provides a comprehensive overview of the shmocker architecture, designed as a rootless Docker image builder that embeds BuildKit as a library for in-process execution.
+*This document provides a comprehensive overview of the shmocker architecture, designed as a rootless Docker image builder that embeds BuildKit as a library for in-process execution. Or, as we like to call it, "How to turn a simple problem into a beautifully complex solution."*
 
-## Architecture Principles
+## Architecture Principles (Our Guiding Delusions)
 
-### Core Design Principles
+### Core Design Principles (The Gospel According to Our AI Overlords)
 
-1. **Rootless by Default**: No elevated privileges required for operation
-2. **Single Binary Distribution**: Self-contained executable with no external dependencies
-3. **BuildKit Integration**: Leverage proven BuildKit technology as an embedded library
-4. **Security First**: Comprehensive security model with supply chain transparency
-5. **Performance Focused**: Match or exceed Docker Buildx performance
-6. **Clean Interfaces**: Testable, mockable interfaces throughout the system
+1. **Rootless by Default**: No elevated privileges required for operation *(because sudo is apparently the root of all evil)*
+2. **Single Binary Distribution**: Self-contained executable with no external dependencies *(portability through sheer stubbornness)*
+3. **BuildKit Integration**: Leverage proven BuildKit technology as an embedded library *(if you can't beat them, embed them)*
+4. **Security First**: Comprehensive security model with supply chain transparency *(paranoia as a feature, not a bug)*
+5. **Performance Focused**: Match or exceed Docker Buildx performance *(setting the bar at "slightly better than adequate")*
+6. **Clean Interfaces**: Testable, mockable interfaces throughout the system *(because if we're going to over-engineer, we might as well do it right)*
 
-### System Architecture
+### System Architecture (The Magnificent Complexity We've Created)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Shmocker Application                       │
+│              Shmocker Application (The Crown Jewel)             │
 ├─────────────────────────────────────────────────────────────────┤
 │  CLI Layer (cmd/shmocker)                                      │
-│  ├─ Command Processing & Flag Parsing                          │
-│  ├─ Configuration Management                                    │
+│  ├─ Command Processing & Flag Parsing    [Because simplicity   │
+│  ├─ Configuration Management             is for the weak]      │
 │  └─ User Interface & Progress Reporting                        │
 ├─────────────────────────────────────────────────────────────────┤
 │  Workflow Orchestration (internal/workflow)                    │
-│  ├─ Build Workflow Management                                  │
-│  ├─ Stage Execution & Dependencies                             │
-│  ├─ Error Handling & Recovery                                  │
+│  ├─ Build Workflow Management            [Micromanaging       │
+│  ├─ Stage Execution & Dependencies       containers since     │ 
+│  ├─ Error Handling & Recovery            2024]               │
 │  └─ Progress Tracking & Reporting                              │
 ├─────────────────────────────────────────────────────────────────┤
-│  Core Services Layer                                           │
-│  ├─ Builder Service (pkg/builder)        │                     │
-│  ├─ Dockerfile Parser (pkg/dockerfile)   │ Business Logic     │
-│  ├─ Registry Client (pkg/registry)       │                     │
-│  ├─ SBOM Generator (pkg/sbom)           │                     │
-│  ├─ Image Signing (pkg/signing)         │                     │
+│  Core Services Layer (Where the Magic Happens)                 │
+│  ├─ Builder Service (pkg/builder)        │ Business Logic     │
+│  ├─ Dockerfile Parser (pkg/dockerfile)   │ (Our Special       │
+│  ├─ Registry Client (pkg/registry)       │ Blend of          │
+│  ├─ SBOM Generator (pkg/sbom)           │ Sophistication     │
+│  ├─ Image Signing (pkg/signing)         │ and Complexity)    │
 │  └─ Cache Manager (pkg/cache)           │                     │
 ├─────────────────────────────────────────────────────────────────┤
-│  Embedded BuildKit Layer                                       │
-│  ├─ BuildKit Controller (Control Client)     │                 │
-│  ├─ Dockerfile Frontend (LLB Generation)     │ In-Process      │
-│  ├─ Build Solver (DAG Resolution)           │ Execution       │
-│  ├─ OCI Worker (Rootless)                   │                 │
-│  ├─ Snapshotter (overlayfs/fuse-overlayfs)  │                 │
-│  └─ Content Store (CAS)                     │                 │
+│  Embedded BuildKit Layer (The Heavy Lifting)                   │
+│  ├─ BuildKit Controller (Control Client)     │ In-Process      │
+│  ├─ Dockerfile Frontend (LLB Generation)     │ Execution       │
+│  ├─ Build Solver (DAG Resolution)           │ (Why use a      │
+│  ├─ OCI Worker (Rootless)                   │ service when    │
+│  ├─ Snapshotter (overlayfs/fuse-overlayfs)  │ you can embed   │
+│  └─ Content Store (CAS)                     │ everything?)    │
 ├─────────────────────────────────────────────────────────────────┤
-│  Infrastructure Layer                                          │
-│  ├─ Error Management (internal/errors)                         │
-│  ├─ Configuration (internal/config)                            │
-│  ├─ Security Framework                                         │
+│  Infrastructure Layer (The Foundation of Our Empire)           │
+│  ├─ Error Management (internal/errors)    [Teaching machines  │
+│  ├─ Configuration (internal/config)       to handle failure   │
+│  ├─ Security Framework                    gracefully]         │
 │  └─ Logging & Metrics                                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Core Components
+## Core Components (The Cast of Our Over-Engineered Drama)
 
-### 1. Builder Interface (`pkg/builder/interfaces.go`)
+### 1. Builder Interface (`pkg/builder/interfaces.go`) - The Star of the Show
 
-The central orchestration interface that coordinates the entire build process:
+The central orchestration interface that coordinates the entire build process *(because someone needs to be in charge of this chaos)*:
 
 ```go
 type Builder interface {
@@ -68,15 +68,15 @@ type Builder interface {
 }
 ```
 
-**Key Features:**
-- BuildKit integration for high-performance builds
-- Multi-platform support
-- Comprehensive build result metadata
-- Progress reporting for real-time feedback
+**Key Features** *(what makes this special)*:
+- BuildKit integration for high-performance builds *(standing on the shoulders of giants)*
+- Multi-platform support *(because architecture diversity is the spice of life)*
+- Comprehensive build result metadata *(documenting every detail of our success or failure)*
+- Progress reporting for real-time feedback *(because watching paint dry is more fun with progress bars)*
 
-### 2. Dockerfile Parser (`pkg/dockerfile/interfaces.go`)
+### 2. Dockerfile Parser (`pkg/dockerfile/interfaces.go`) - The Text Whisperer
 
-Advanced Dockerfile parsing with full AST representation:
+Advanced Dockerfile parsing with full AST representation *(because apparently Docker's parser wasn't sophisticated enough)*:
 
 ```go
 type Parser interface {
@@ -86,15 +86,15 @@ type Parser interface {
 }
 ```
 
-**Key Features:**
-- Complete Dockerfile grammar support (Docker 24+ syntax)
-- Rich AST with source location information
-- LLB conversion for BuildKit integration
-- Validation and error reporting
+**Key Features** *(the bells and whistles)*:
+- Complete Dockerfile grammar support (Docker 24+ syntax) *(because backwards compatibility is a cruel mistress)*
+- Rich AST with source location information *(knowing exactly where things went wrong)*
+- LLB conversion for BuildKit integration *(translating human intentions to machine instructions)*
+- Validation and error reporting *(the bearer of bad news)*
 
-### 3. Registry Client (`pkg/registry/interfaces.go`)
+### 3. Registry Client (`pkg/registry/interfaces.go`) - The Diplomatic Corps
 
-OCI-compliant registry operations with multi-tier support:
+OCI-compliant registry operations with multi-tier support *(because talking to Docker Hub is apparently rocket science)*:
 
 ```go
 type Client interface {
@@ -284,14 +284,14 @@ The architecture is documented through comprehensive ADRs:
 4. **Documentation**: Comprehensive documentation for all interfaces
 5. **Review Process**: Architecture review for all interface changes
 
-## Performance Characteristics
+## Performance Characteristics (Setting the Bar Low Enough to Clear)
 
-### Performance Targets
+### Performance Targets (The Benchmarks of Modest Ambition)
 
-- **Cold Cache**: ≤110% of Docker Buildx build time
-- **Warm Cache**: ≤105% of Docker Buildx build time
-- **Memory Usage**: Comparable to BuildKit daemon
-- **Disk Usage**: Efficient layer caching and deduplication
+- **Cold Cache**: ≤110% of Docker Buildx build time *(only 10% slower! Victory!)*
+- **Warm Cache**: ≤105% of Docker Buildx build time *(getting closer to competitive)*
+- **Memory Usage**: Comparable to BuildKit daemon *(same memory footprint, different name)*
+- **Disk Usage**: Efficient layer caching and deduplication *(because storage is expensive)*
 
 ### Optimization Strategies
 
