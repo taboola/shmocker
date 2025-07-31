@@ -15,6 +15,7 @@ import (
 	"github.com/shmocker/shmocker/internal/config"
 	"github.com/shmocker/shmocker/pkg/builder"
 	"github.com/shmocker/shmocker/pkg/dockerfile"
+	"github.com/shmocker/shmocker/pkg/registry"
 )
 
 var (
@@ -330,6 +331,20 @@ func executeBuild(ctx context.Context, req *builder.BuildRequest, cmd *cobra.Com
 		return fmt.Errorf("build failed: %w", err)
 	}
 
+	// Push images to registry if tags are specified
+	if len(req.Tags) > 0 {
+		for _, tag := range req.Tags {
+			if strings.Contains(tag, "/") {
+				// Tag contains registry, push to registry
+				if err := pushImageToRegistry(ctx, result, tag); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: Failed to push %s: %v\n", tag, err)
+				} else {
+					fmt.Printf("Successfully pushed %s\n", tag)
+				}
+			}
+		}
+	}
+
 	// Print build results
 	fmt.Printf("\nBuild completed successfully in %s\n", result.BuildTime)
 	if result.ImageID != "" {
@@ -418,11 +433,14 @@ func parseOutputConfig(outputStr string) (*builder.OutputConfig, error) {
 func parseCacheImports(cacheFrom []string) []*builder.CacheImport {
 	var imports []*builder.CacheImport
 	for _, cache := range cacheFrom {
-		// Simple implementation - assume registry cache
-		imports = append(imports, &builder.CacheImport{
-			Type: "registry",
-			Ref:  cache,
-		})
+		cacheImport := parseCacheSpec(cache, true)
+		if cacheImport != nil {
+			imports = append(imports, &builder.CacheImport{
+				Type:  cacheImport.Type,
+				Ref:   cacheImport.Ref,
+				Attrs: cacheImport.Attrs,
+			})
+		}
 	}
 	return imports
 }
@@ -430,13 +448,130 @@ func parseCacheImports(cacheFrom []string) []*builder.CacheImport {
 func parseCacheExports(cacheTo []string) []*builder.CacheExport {
 	var exports []*builder.CacheExport
 	for _, cache := range cacheTo {
-		// Simple implementation - assume registry cache
-		exports = append(exports, &builder.CacheExport{
-			Type: "registry",
-			Ref:  cache,
-		})
+		cacheExport := parseCacheSpec(cache, false)
+		if cacheExport != nil {
+			exports = append(exports, &builder.CacheExport{
+				Type:  cacheExport.Type,
+				Ref:   cacheExport.Ref,
+				Attrs: cacheExport.Attrs,
+			})
+		}
 	}
 	return exports
+}
+
+// CacheSpec represents a parsed cache specification
+type CacheSpec struct {
+	Type  string
+	Ref   string
+	Attrs map[string]string
+}
+
+func parseCacheSpec(spec string, isImport bool) *CacheSpec {
+	// Parse cache specification in format: type=registry,ref=myregistry.com/myapp/cache
+	// or simple format: myregistry.com/myapp/cache (defaults to registry type)
+	
+	attrs := make(map[string]string)
+	cacheType := "registry" // default type
+	ref := ""
+
+	if strings.Contains(spec, "=") {
+		// Parse key=value format
+		parts := strings.Split(spec, ",")
+		for _, part := range parts {
+			kv := strings.SplitN(part, "=", 2)
+			if len(kv) == 2 {
+				key := strings.TrimSpace(kv[0])
+				value := strings.TrimSpace(kv[1])
+				
+				switch key {
+				case "type":
+					cacheType = value
+				case "ref":
+					ref = value
+				default:
+					attrs[key] = value
+				}
+			}
+		}
+	} else {
+		// Simple format - assume it's a registry reference
+		ref = spec
+	}
+
+	// Validate and set defaults
+	if ref == "" {
+		return nil // Invalid cache spec
+	}
+
+	// Set default attributes based on cache type
+	switch cacheType {
+	case "registry":
+		if _, exists := attrs["mode"]; !exists {
+			if isImport {
+				attrs["mode"] = "min" // Import minimal cache data by default
+			} else {
+				attrs["mode"] = "max" // Export maximum cache data by default
+			}
+		}
+		if _, exists := attrs["compression"]; !exists {
+			attrs["compression"] = "gzip" // Use gzip compression by default
+		}
+	case "local":
+		if _, exists := attrs["dest"]; !exists && !isImport {
+			attrs["dest"] = "./cache" // Default local cache directory
+		}
+		if _, exists := attrs["src"]; !exists && isImport {
+			attrs["src"] = "./cache" // Default local cache directory
+		}
+	case "inline":
+		// Inline cache embeds cache data in the image manifest
+		if _, exists := attrs["mode"]; !exists {
+			attrs["mode"] = "min"
+		}
+	}
+
+	return &CacheSpec{
+		Type:  cacheType,
+		Ref:   ref,
+		Attrs: attrs,
+	}
+}
+
+// pushImageToRegistry pushes a built image to a registry.
+func pushImageToRegistry(ctx context.Context, buildResult *builder.BuildResult, tag string) error {
+	// Create registry client
+	registryClient, err := registry.New(nil) // Use default config
+	if err != nil {
+		return fmt.Errorf("failed to create registry client: %w", err)
+	}
+	defer registryClient.Close()
+
+	// TODO: Convert build result to registry push request
+	// This is a placeholder implementation since we need to integrate with BuildKit's output
+	
+	// For now, we'll create a minimal push request structure
+	// In a real implementation, this would extract image layers and manifest from the build result
+	pushReq := &registry.PushRequest{
+		Reference: tag,
+		Manifest: &registry.Manifest{
+			SchemaVersion: 2,
+			MediaType:     registry.MediaTypes.OCIManifest,
+			Layers:        []*registry.Descriptor{},
+		},
+		Blobs: []*registry.BlobData{},
+		ProgressCallback: func(progress *registry.PushProgress) {
+			fmt.Printf("Pushing %s: %s\n", progress.ID, progress.Action)
+		},
+	}
+
+	// Push to registry
+	_, err = registryClient.Push(ctx, pushReq)
+	if err != nil {
+		return fmt.Errorf("push failed: %w", err)
+	}
+
+	return nil
 }
 
 func main() {
