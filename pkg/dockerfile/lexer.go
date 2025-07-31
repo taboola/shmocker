@@ -315,6 +315,8 @@ func (l *Lexer) NextToken() *Token {
 			if l.peekChar() == '\n' {
 				l.readChar() // skip escape char
 				l.readChar() // skip newline
+				// Skip whitespace after line continuation
+				l.skipWhitespace()
 				tok = &Token{Type: TokenLineContinuation, Value: string(l.escapeChar) + "\n", Line: startLine, Column: startColumn}
 			} else {
 				// Regular argument
@@ -335,7 +337,7 @@ func (l *Lexer) NextToken() *Token {
 				tok = &Token{Type: TokenArgument, Value: word, Line: startLine, Column: startColumn}
 			}
 		} else if l.current == '-' && l.peekChar() == '-' {
-			// Handle flags
+			// Handle flags - but we need context to know if this is an instruction flag or command flag
 			flag := l.readFlag()
 			tok = &Token{Type: TokenFlag, Value: flag, Line: startLine, Column: startColumn}
 		} else {
@@ -388,6 +390,20 @@ func (l *Lexer) isLineStart(pos int) bool {
 			return false
 		}
 	}
+	
+	// Check if the previous line ended with a line continuation
+	if l.line > 1 {
+		prevLineEnd := lineStart - 1
+		// Look backward for the end of the previous line
+		for prevLineEnd > 0 && l.source[prevLineEnd] == '\n' {
+			prevLineEnd--
+		}
+		// Check if the previous line ended with an escape character
+		if prevLineEnd > 0 && l.source[prevLineEnd] == byte(l.escapeChar) {
+			return false // This is a continuation, not a new instruction line
+		}
+	}
+	
 	return true
 }
 

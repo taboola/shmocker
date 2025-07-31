@@ -371,11 +371,18 @@ func (p *ParserImpl) parseRunInstruction() (*RunInstruction, error) {
 		Mounts: []*MountInstruction{},
 	}
 	
-	// Parse flags
+	// Parse flags - only consume RUN instruction flags
 	for p.peek().Type == TokenFlag {
-		flag := p.advance()
-		if err := p.parseRunFlag(flag.Value, instr); err != nil {
-			return nil, err
+		flagToken := p.peek()
+		// Check if this is a valid RUN instruction flag
+		if isValidRunFlag(flagToken.Value) {
+			flag := p.advance()
+			if err := p.parseRunFlag(flag.Value, instr); err != nil {
+				return nil, err
+			}
+		} else {
+			// This flag is part of the command, not an instruction flag
+			break
 		}
 	}
 	
@@ -491,11 +498,14 @@ func (p *ParserImpl) parseEnvInstruction() (*EnvInstruction, error) {
 	// Parse key-value pairs
 	for !p.isAtEnd() && p.peek().Type != TokenNewline && p.peek().Type != TokenInstruction {
 		token := p.peek()
-		if token.Type != TokenArgument && token.Type != TokenString {
-			break
-		}
-		
-		arg := p.advance()
+		switch token.Type {
+		case TokenLineContinuation:
+			// Skip line continuation tokens
+			p.advance()
+			continue
+		case TokenArgument, TokenString:
+			// Process the argument
+			arg := p.advance()
 		
 		// Check if it's key=value format
 		if strings.Contains(arg.Value, "=") {
@@ -513,6 +523,9 @@ func (p *ParserImpl) parseEnvInstruction() (*EnvInstruction, error) {
 			} else {
 				return nil, fmt.Errorf("ENV instruction requires a value for key '%s' at line %d", key, token.Line)
 			}
+		}
+		default:
+			break
 		}
 	}
 	
@@ -547,11 +560,20 @@ func (p *ParserImpl) parseCommand() ([]string, bool, error) {
 		// Shell format - collect all remaining arguments
 		for !p.isAtEnd() && p.peek().Type != TokenNewline && p.peek().Type != TokenInstruction {
 			token := p.peek()
-			if token.Type != TokenArgument && token.Type != TokenString {
+			switch token.Type {
+			case TokenArgument, TokenString:
+				arg := p.advance()
+				commands = append(commands, p.expandBuildArgs(arg.Value))
+			case TokenFlag:
+				// Command flags like --no-cache should be treated as arguments
+				arg := p.advance()
+				commands = append(commands, p.expandBuildArgs(arg.Value))
+			case TokenLineContinuation:
+				// Skip line continuation tokens - they're just formatting
+				p.advance()
+			default:
 				break
 			}
-			arg := p.advance()
-			commands = append(commands, p.expandBuildArgs(arg.Value))
 		}
 	}
 	
@@ -668,11 +690,17 @@ func (p *ParserImpl) parseVolumeInstruction() (*VolumeInstruction, error) {
 	// Parse paths
 	for !p.isAtEnd() && p.peek().Type != TokenNewline && p.peek().Type != TokenInstruction {
 		token := p.peek()
-		if token.Type != TokenArgument && token.Type != TokenString {
+		switch token.Type {
+		case TokenLineContinuation:
+			// Skip line continuation tokens
+			p.advance()
+			continue
+		case TokenArgument, TokenString:
+			pathToken := p.advance()
+			instr.Paths = append(instr.Paths, p.expandBuildArgs(pathToken.Value))
+		default:
 			break
 		}
-		pathToken := p.advance()
-		instr.Paths = append(instr.Paths, p.expandBuildArgs(pathToken.Value))
 	}
 	
 	return instr, nil
@@ -691,11 +719,17 @@ func (p *ParserImpl) parseExposeInstruction() (*ExposeInstruction, error) {
 	// Parse ports
 	for !p.isAtEnd() && p.peek().Type != TokenNewline && p.peek().Type != TokenInstruction {
 		token := p.peek()
-		if token.Type != TokenArgument && token.Type != TokenString {
+		switch token.Type {
+		case TokenLineContinuation:
+			// Skip line continuation tokens
+			p.advance()
+			continue
+		case TokenArgument, TokenString:
+			portToken := p.advance()
+			instr.Ports = append(instr.Ports, p.expandBuildArgs(portToken.Value))
+		default:
 			break
 		}
-		portToken := p.advance()
-		instr.Ports = append(instr.Ports, p.expandBuildArgs(portToken.Value))
 	}
 	
 	return instr, nil
@@ -715,26 +749,32 @@ func (p *ParserImpl) parseLabelInstruction() (*LabelInstruction, error) {
 	// Parse key-value pairs (similar to ENV)
 	for !p.isAtEnd() && p.peek().Type != TokenNewline && p.peek().Type != TokenInstruction {
 		token := p.peek()
-		if token.Type != TokenArgument && token.Type != TokenString {
-			break
-		}
+		switch token.Type {
+		case TokenLineContinuation:
+			// Skip line continuation tokens
+			p.advance()
+			continue
+		case TokenArgument, TokenString:
+			// Process the argument
+			arg := p.advance()
 		
-		arg := p.advance()
-		
-		if strings.Contains(arg.Value, "=") {
-			parts := strings.SplitN(arg.Value, "=", 2)
-			key := parts[0]
-			value := p.expandBuildArgs(parts[1])
-			instr.Labels[key] = value
-		} else {
-			key := arg.Value
-			if p.peek().Type == TokenArgument || p.peek().Type == TokenString {
-				valueToken := p.advance()
-				value := p.expandBuildArgs(valueToken.Value)
+			if strings.Contains(arg.Value, "=") {
+				parts := strings.SplitN(arg.Value, "=", 2)
+				key := parts[0]
+				value := p.expandBuildArgs(parts[1])
 				instr.Labels[key] = value
 			} else {
-				return nil, fmt.Errorf("LABEL instruction requires a value for key '%s' at line %d", key, token.Line)
+				key := arg.Value
+				if p.peek().Type == TokenArgument || p.peek().Type == TokenString {
+					valueToken := p.advance()
+					value := p.expandBuildArgs(valueToken.Value)
+					instr.Labels[key] = value
+				} else {
+					return nil, fmt.Errorf("LABEL instruction requires a value for key '%s' at line %d", key, token.Line)
+				}
 			}
+		default:
+			break
 		}
 	}
 	
@@ -829,6 +869,11 @@ func (p *ParserImpl) parseHealthcheckInstruction() (*HealthcheckInstruction, err
 		}
 	}
 	
+	// Skip line continuation tokens
+	for p.peek().Type == TokenLineContinuation {
+		p.advance()
+	}
+	
 	// Parse type (NONE or CMD)
 	if p.peek().Type != TokenArgument {
 		return nil, fmt.Errorf("HEALTHCHECK instruction requires NONE or CMD at line %d", p.peek().Line)
@@ -896,6 +941,20 @@ func (p *ParserImpl) parseFlag(flagStr string, instr interface{}) error {
 	}
 	
 	return nil
+}
+
+// isValidRunFlag checks if a flag is a valid RUN instruction flag
+func isValidRunFlag(flagStr string) bool {
+	flagStr = strings.TrimPrefix(flagStr, "--")
+	parts := strings.SplitN(flagStr, "=", 2)
+	flagName := parts[0]
+	
+	switch flagName {
+	case "mount", "network", "security":
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *ParserImpl) parseRunFlag(flagStr string, instr *RunInstruction) error {
