@@ -5,6 +5,7 @@ go 1.24.3
 require (
 	github.com/anchore/syft v1.29.1
 	github.com/containerd/containerd v1.7.27
+	github.com/google/go-containerregistry v0.20.6
 	github.com/google/uuid v1.6.0
 	github.com/moby/buildkit v0.12.4
 	github.com/opencontainers/go-digest v1.0.0
@@ -139,7 +140,6 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/google/go-containerregistry v0.20.6 // indirect
 	github.com/google/licensecheck v0.3.1 // indirect
 	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
