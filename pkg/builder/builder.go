@@ -68,12 +68,29 @@ func (b *builder) Build(ctx context.Context, req *BuildRequest) (*BuildResult, e
 		return nil, errors.Wrap(err, "invalid build request")
 	}
 
+	// Validate multi-stage build if target is specified
+	if err := b.validateMultiStageBuild(req); err != nil {
+		return nil, errors.Wrap(err, "multi-stage build validation failed")
+	}
+
 	// Prepare build context
 	buildContext, err := b.prepareBuildContext(ctx, &req.Context)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to prepare build context")
 	}
 	defer buildContext.Close()
+
+	// Handle cache import if specified
+	if len(req.CacheFrom) > 0 {
+		if err := b.controller.ImportCache(ctx, req.CacheFrom); err != nil {
+			return nil, errors.Wrap(err, "failed to import cache")
+		}
+	}
+
+	// Execute multi-platform build if multiple platforms specified
+	if len(req.Platforms) > 1 {
+		return b.buildMultiPlatform(ctx, req, buildContext)
+	}
 
 	// Convert Dockerfile AST to LLB definition
 	def, err := b.generateLLBDefinition(ctx, req, buildContext)
@@ -93,6 +110,11 @@ func (b *builder) Build(ctx context.Context, req *BuildRequest) (*BuildResult, e
 		BuildTime:   time.Since(startTime),
 		CacheHits:   0, // TODO: Extract from build metadata
 		CacheMisses: 0, // TODO: Extract from build metadata
+	}
+
+	// Extract metadata from build result
+	if result.Metadata != nil {
+		// TODO: Parse build metadata for cache statistics, manifests, etc.
 	}
 
 	// Handle cache export if specified
@@ -179,9 +201,81 @@ func (b *builder) validateBuildRequest(req *BuildRequest) error {
 		if platform.OS == "" || platform.Architecture == "" {
 			return errors.New("platform OS and architecture are required")
 		}
+		// Validate supported platforms
+		if !b.isSupportedPlatform(platform) {
+			return errors.Errorf("unsupported platform: %s", platform.String())
+		}
 	}
 
 	return nil
+}
+
+// validateMultiStageBuild validates multi-stage build specific requirements
+func (b *builder) validateMultiStageBuild(req *BuildRequest) error {
+	if req.Dockerfile == nil || len(req.Dockerfile.Stages) <= 1 {
+		return nil // Single stage build, no validation needed
+	}
+
+	// Build stage name map
+	stageNames := make(map[string]int)
+	for i, stage := range req.Dockerfile.Stages {
+		if stage.Name != "" {
+			stageNames[stage.Name] = i
+		}
+	}
+
+	// Validate target stage exists
+	if req.Target != "" {
+		if _, exists := stageNames[req.Target]; !exists {
+			return errors.Errorf("target stage '%s' not found in Dockerfile", req.Target)
+		}
+	}
+
+	// Validate stage dependencies
+	for i, stage := range req.Dockerfile.Stages {
+		// Check FROM stage references
+		if stage.From != nil && stage.From.Stage != "" {
+			if depIndex, exists := stageNames[stage.From.Stage]; !exists {
+				return errors.Errorf("stage %d references unknown stage '%s'", i, stage.From.Stage)
+			} else if depIndex >= i {
+				return errors.Errorf("stage %d references future stage '%s' (index %d)", i, stage.From.Stage, depIndex)
+			}
+		}
+
+		// Check COPY --from stage references
+		for _, instr := range stage.Instructions {
+			if copy, ok := instr.(*dockerfile.CopyInstruction); ok && copy.From != "" {
+				// Check if it's a stage reference (not an external image)
+				if depIndex, exists := stageNames[copy.From]; exists {
+					if depIndex >= i {
+						return errors.Errorf("stage %d COPY --from references future stage '%s' (index %d)", i, copy.From, depIndex)
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// isSupportedPlatform checks if the platform is supported
+func (b *builder) isSupportedPlatform(platform Platform) bool {
+	// For now, support common platforms
+	supportedPlatforms := map[string][]string{
+		"linux": {"amd64", "arm64", "arm", "386", "ppc64le", "s390x"},
+		"darwin": {"amd64", "arm64"},
+		"windows": {"amd64"},
+	}
+
+	if archs, exists := supportedPlatforms[platform.OS]; exists {
+		for _, arch := range archs {
+			if arch == platform.Architecture {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // prepareBuildContext prepares the build context based on the context type
@@ -229,51 +323,63 @@ func (b *builder) prepareLocalContext(ctx context.Context, buildCtx *BuildContex
 
 // generateLLBDefinition converts the Dockerfile AST to LLB definition
 func (b *builder) generateLLBDefinition(ctx context.Context, req *BuildRequest, buildCtx *buildContextManager) (*SolveDefinition, error) {
-	// Use BuildKit's Dockerfile frontend to convert to LLB
-	frontendAttrs := map[string][]byte{
-		"filename": []byte("Dockerfile"),
+	// Create LLB converter for multi-stage support
+	converter := dockerfile.NewLLBConverter()
+	
+	// Prepare conversion options
+	convertOpts := &dockerfile.ConvertOptions{
+		BuildArgs: req.BuildArgs,
+		Target:    req.Target,
+		Labels:    req.Labels,
 	}
-
+	
+	// Set platform if specified
+	if len(req.Platforms) > 0 {
+		convertOpts.Platform = req.Platforms[0].String()
+	}
+	
+	// Convert Dockerfile AST to LLB definition with multi-stage support
+	llbDef, err := converter.Convert(req.Dockerfile, convertOpts)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to convert Dockerfile AST to LLB")
+	}
+	
+	// Prepare frontend attributes for BuildKit
+	frontendAttrs := make(map[string][]byte)
+	
 	// Add build args
 	for k, v := range req.BuildArgs {
 		frontendAttrs["build-arg:"+k] = []byte(v)
 	}
-
+	
 	// Add labels
 	for k, v := range req.Labels {
 		frontendAttrs["label:"+k] = []byte(v)
 	}
-
+	
 	// Add target if specified
 	if req.Target != "" {
 		frontendAttrs["target"] = []byte(req.Target)
 	}
-
+	
 	// Add platform information
 	if len(req.Platforms) > 0 {
 		platform := req.Platforms[0] // Use first platform for single-platform builds
 		frontendAttrs["platform"] = []byte(platform.String())
 	}
-
-	// Convert Dockerfile AST to bytes (this would need to be implemented)
-	dockerfileContent, err := b.dockerfileASTToBytes(req.Dockerfile)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to serialize Dockerfile AST")
+	
+	// Copy LLB metadata to frontend attributes
+	for k, v := range llbDef.Metadata {
+		frontendAttrs[k] = v
 	}
-
+	
 	return &SolveDefinition{
-		Definition: dockerfileContent,
+		Definition: llbDef.Definition,
 		Frontend:   "dockerfile.v0",
 		Metadata:   frontendAttrs,
 	}, nil
 }
 
-// dockerfileASTToBytes converts a Dockerfile AST back to byte representation
-func (b *builder) dockerfileASTToBytes(ast *dockerfile.AST) ([]byte, error) {
-	// TODO: Implement AST to bytes conversion
-	// This would reconstruct the Dockerfile content from the AST
-	return nil, errors.New("AST to bytes conversion not yet implemented")
-}
 
 // buildContextManager manages build context resources
 type buildContextManager struct {
@@ -309,4 +415,65 @@ func (pr *progressReporter) SetTotal(total int) {
 
 func (pr *progressReporter) Close() {
 	// Progress channel is managed by caller
+}
+
+// buildMultiPlatform handles multi-platform builds
+func (b *builder) buildMultiPlatform(ctx context.Context, req *BuildRequest, buildCtx *buildContextManager) (*BuildResult, error) {
+	startTime := time.Now()
+	var manifests []*ImageManifest
+	var errors []error
+
+	// Build for each platform
+	for _, platform := range req.Platforms {
+		// Create platform-specific build request
+		platformReq := *req
+		platformReq.Platforms = []Platform{platform}
+
+		// Generate LLB definition for this platform
+		def, err := b.generateLLBDefinition(ctx, &platformReq, buildCtx)
+		if err != nil {
+			errors = append(errors, fmt.Errorf("failed to generate LLB for platform %s: %w", platform.String(), err))
+			continue
+		}
+
+		// Execute build for this platform
+		result, err := b.controller.Solve(ctx, def)
+		if err != nil {
+			errors = append(errors, fmt.Errorf("build failed for platform %s: %w", platform.String(), err))
+			continue
+		}
+
+		// Create manifest for this platform
+		manifest := &ImageManifest{
+			MediaType:     "application/vnd.oci.image.manifest.v1+json",
+			SchemaVersion: 2,
+			Platform:      &platform,
+			// TODO: Populate config and layers from result
+		}
+		manifests = append(manifests, manifest)
+	}
+
+	// Check if any builds succeeded
+	if len(manifests) == 0 {
+		return nil, fmt.Errorf("all platform builds failed: %v", errors)
+	}
+
+	// Create multi-platform result
+	buildResult := &BuildResult{
+		ImageID:     fmt.Sprintf("multi-platform-%d", time.Now().Unix()),
+		Manifests:   manifests,
+		BuildTime:   time.Since(startTime),
+		CacheHits:   0, // TODO: Aggregate from platform builds
+		CacheMisses: 0, // TODO: Aggregate from platform builds
+	}
+
+	// Handle cache export if specified
+	if len(req.CacheTo) > 0 {
+		if err := b.controller.ExportCache(ctx, req.CacheTo); err != nil {
+			return nil, fmt.Errorf("failed to export cache: %w", err)
+		}
+		buildResult.ExportedCache = req.CacheTo
+	}
+
+	return buildResult, nil
 }

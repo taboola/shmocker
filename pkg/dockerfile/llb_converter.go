@@ -65,25 +65,30 @@ func (c *LLBConverterImpl) Convert(ast *AST, opts *ConvertOptions) (*LLBDefiniti
 		}
 	}
 	
-	// Convert stages up to target
-	stageStates := make(map[int]*LLBState)
+	// Build stage dependency graph and determine build order
 	stageNames := make(map[string]int)
-	
-	for i := 0; i <= targetIndex; i++ {
-		stage := ast.Stages[i]
-		
-		// Track stage names
+	for i, stage := range ast.Stages {
 		if stage.Name != "" {
 			stageNames[stage.Name] = i
 		}
+	}
+	
+	// Determine which stages need to be built based on dependencies
+	requiredStages := c.findRequiredStages(ast, targetIndex, stageNames)
+	
+	// Convert required stages in dependency order
+	stageStates := make(map[int]*LLBState)
+	
+	for _, stageIndex := range requiredStages {
+		stage := ast.Stages[stageIndex]
 		
-		// Convert stage
-		state, err := c.ConvertStage(stage, opts)
+		// Convert stage with access to previously built stages
+		state, err := c.ConvertStageWithDependencies(stage, stageStates, stageNames, opts)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert stage %d: %w", i, err)
+			return nil, fmt.Errorf("failed to convert stage %d (%s): %w", stageIndex, stage.Name, err)
 		}
 		
-		stageStates[i] = state
+		stageStates[stageIndex] = state
 	}
 	
 	// Build final LLB definition
@@ -98,6 +103,11 @@ func (c *LLBConverterImpl) Convert(ast *AST, opts *ConvertOptions) (*LLBDefiniti
 
 // ConvertStage converts a single build stage to LLB.
 func (c *LLBConverterImpl) ConvertStage(stage *Stage, opts *ConvertOptions) (*LLBState, error) {
+	return c.ConvertStageWithDependencies(stage, nil, nil, opts)
+}
+
+// ConvertStageWithDependencies converts a single build stage to LLB with access to dependency stages.
+func (c *LLBConverterImpl) ConvertStageWithDependencies(stage *Stage, stageStates map[int]*LLBState, stageNames map[string]int, opts *ConvertOptions) (*LLBState, error) {
 	if stage == nil {
 		return nil, fmt.Errorf("stage is nil")
 	}
@@ -106,19 +116,43 @@ func (c *LLBConverterImpl) ConvertStage(stage *Stage, opts *ConvertOptions) (*LL
 		return nil, fmt.Errorf("stage must have FROM instruction")
 	}
 	
-	// Resolve base image
+	// Resolve base image or stage reference
 	baseImageRef, err := c.ResolveBaseImage(stage.From)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve base image: %w", err)
 	}
 	
-	// Create initial state from base image
-	state := &LLBState{
-		State: map[string]interface{}{
-			"type":  "image",
-			"image": baseImageRef.String(),
-		},
-		Metadata: make(map[string]interface{}),
+	// Create initial state from base image or previous stage
+	var state *LLBState
+	if stage.From.Stage != "" {
+		// This stage is based on another stage
+		if stageNames != nil {
+			if stageIndex, exists := stageNames[stage.From.Stage]; exists {
+				if stageStates != nil {
+					if baseState, exists := stageStates[stageIndex]; exists {
+						// Clone the base state from the referenced stage
+						state = c.cloneState(baseState)
+					} else {
+						return nil, fmt.Errorf("referenced stage '%s' not found in stage states", stage.From.Stage)
+					}
+				} else {
+					return nil, fmt.Errorf("stage states not provided for stage reference '%s'", stage.From.Stage)
+				}
+			} else {
+				return nil, fmt.Errorf("referenced stage '%s' not found", stage.From.Stage)
+			}
+		} else {
+			return nil, fmt.Errorf("stage names not provided for stage reference '%s'", stage.From.Stage)
+		}
+	} else {
+		// This stage is based on an external image
+		state = &LLBState{
+			State: map[string]interface{}{
+				"type":  "image",
+				"image": baseImageRef.String(),
+			},
+			Metadata: make(map[string]interface{}),
+		}
 	}
 	
 	// Set platform if specified
@@ -132,7 +166,7 @@ func (c *LLBConverterImpl) ConvertStage(stage *Stage, opts *ConvertOptions) (*LL
 	
 	// Apply instructions
 	for i, instr := range stage.Instructions {
-		newState, err := c.convertInstruction(instr, state, stage, opts)
+		newState, err := c.convertInstructionWithDependencies(instr, state, stage, stageStates, stageNames, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert instruction %d (%s): %w", i, instr.GetCmd(), err)
 		}
@@ -208,11 +242,16 @@ func (c *LLBConverterImpl) ResolveBaseImage(from *FromInstruction) (*ImageRefere
 
 // convertInstruction converts a single instruction to LLB operations.
 func (c *LLBConverterImpl) convertInstruction(instr Instruction, currentState *LLBState, stage *Stage, opts *ConvertOptions) (*LLBState, error) {
+	return c.convertInstructionWithDependencies(instr, currentState, stage, nil, nil, opts)
+}
+
+// convertInstructionWithDependencies converts a single instruction to LLB operations with access to stage dependencies.
+func (c *LLBConverterImpl) convertInstructionWithDependencies(instr Instruction, currentState *LLBState, stage *Stage, stageStates map[int]*LLBState, stageNames map[string]int, opts *ConvertOptions) (*LLBState, error) {
 	switch i := instr.(type) {
 	case *RunInstruction:
 		return c.convertRunInstruction(i, currentState, opts)
 	case *CopyInstruction:
-		return c.convertCopyInstruction(i, currentState, stage, opts)
+		return c.convertCopyInstructionWithDependencies(i, currentState, stage, stageStates, stageNames, opts)
 	case *AddInstruction:
 		return c.convertAddInstruction(i, currentState, opts)
 	case *EnvInstruction:
@@ -304,6 +343,11 @@ func (c *LLBConverterImpl) convertRunInstruction(run *RunInstruction, currentSta
 
 // convertCopyInstruction converts a COPY instruction to LLB.
 func (c *LLBConverterImpl) convertCopyInstruction(copy *CopyInstruction, currentState *LLBState, stage *Stage, opts *ConvertOptions) (*LLBState, error) {
+	return c.convertCopyInstructionWithDependencies(copy, currentState, stage, nil, nil, opts)
+}
+
+// convertCopyInstructionWithDependencies converts a COPY instruction to LLB with stage dependency support.
+func (c *LLBConverterImpl) convertCopyInstructionWithDependencies(copy *CopyInstruction, currentState *LLBState, stage *Stage, stageStates map[int]*LLBState, stageNames map[string]int, opts *ConvertOptions) (*LLBState, error) {
 	if len(copy.Sources) == 0 {
 		return nil, fmt.Errorf("COPY instruction has no sources")
 	}
@@ -320,9 +364,30 @@ func (c *LLBConverterImpl) convertCopyInstruction(copy *CopyInstruction, current
 		},
 	}
 	
-	// Handle --from flag
+	// Handle --from flag (cross-stage copy)
 	if copy.From != "" {
-		fileOp["from"] = copy.From
+		// Check if it's a stage reference
+		if stageNames != nil {
+			if stageIndex, exists := stageNames[copy.From]; exists {
+				// It's a stage reference - validate the stage exists and is built
+				if stageStates != nil {
+					if _, exists := stageStates[stageIndex]; !exists {
+						return nil, fmt.Errorf("COPY --from stage '%s' not found or not yet built", copy.From)
+					}
+					// Reference the stage state for the copy operation
+					fileOp["from_stage"] = stageIndex
+					fileOp["from_stage_name"] = copy.From
+				} else {
+					return nil, fmt.Errorf("stage states not available for --from stage '%s'", copy.From)
+				}
+			} else {
+				// It's an external image reference
+				fileOp["from"] = copy.From
+			}
+		} else {
+			// Assume it's an external image reference
+			fileOp["from"] = copy.From
+		}
 	}
 	
 	// Handle --chown flag
@@ -775,4 +840,120 @@ func (c *LLBConverterImpl) buildMetadata(ast *AST, opts *ConvertOptions) map[str
 // expandBuildArgs expands build arguments in a string.
 func (c *LLBConverterImpl) expandBuildArgs(value string) string {
 	return expandArgs(value, c.buildArgs)
+}
+
+// FindRequiredStages determines which stages need to be built based on dependencies.
+// This is exported for testing purposes.
+func (c *LLBConverterImpl) FindRequiredStages(ast *AST, targetIndex int, stageNames map[string]int) []int {
+	return c.findRequiredStages(ast, targetIndex, stageNames)
+}
+
+// findRequiredStages determines which stages need to be built based on dependencies.
+func (c *LLBConverterImpl) findRequiredStages(ast *AST, targetIndex int, stageNames map[string]int) []int {
+	required := make(map[int]bool)
+	visited := make(map[int]bool)
+	
+	// Find all stages required to build the target stage
+	c.findStageDependencies(ast, targetIndex, stageNames, required, visited)
+	
+	// Convert to sorted slice
+	var result []int
+	for i := 0; i < len(ast.Stages); i++ {
+		if required[i] {
+			result = append(result, i)
+		}
+	}
+	
+	return result
+}
+
+// findStageDependencies recursively finds all dependencies for a stage.
+func (c *LLBConverterImpl) findStageDependencies(ast *AST, stageIndex int, stageNames map[string]int, required map[int]bool, visited map[int]bool) {
+	if visited[stageIndex] {
+		return
+	}
+	visited[stageIndex] = true
+	required[stageIndex] = true
+	
+	stage := ast.Stages[stageIndex]
+	
+	// Check FROM instruction for stage dependencies
+	if stage.From != nil && stage.From.Stage != "" {
+		if depIndex, exists := stageNames[stage.From.Stage]; exists {
+			c.findStageDependencies(ast, depIndex, stageNames, required, visited)
+		}
+	}
+	
+	// Check COPY --from instructions for stage dependencies
+	for _, instr := range stage.Instructions {
+		if copy, ok := instr.(*CopyInstruction); ok && copy.From != "" {
+			// Check if it's a stage reference (not an external image)
+			if depIndex, exists := stageNames[copy.From]; exists {
+				c.findStageDependencies(ast, depIndex, stageNames, required, visited)
+			}
+		}
+	}
+}
+
+// cloneState creates a deep copy of an LLB state.
+func (c *LLBConverterImpl) cloneState(original *LLBState) *LLBState {
+	cloned := &LLBState{
+		State:    c.cloneMap(original.State),
+		Metadata: make(map[string]interface{}),
+	}
+	
+	// Clone metadata
+	for k, v := range original.Metadata {
+		cloned.Metadata[k] = c.cloneValue(v)
+	}
+	
+	return cloned
+}
+
+// cloneMap creates a deep copy of a map.
+func (c *LLBConverterImpl) cloneMap(original interface{}) interface{} {
+	if original == nil {
+		return nil
+	}
+	
+	switch m := original.(type) {
+	case map[string]interface{}:
+		cloned := make(map[string]interface{})
+		for k, v := range m {
+			cloned[k] = c.cloneValue(v)
+		}
+		return cloned
+	default:
+		return original
+	}
+}
+
+// cloneValue creates a deep copy of a value.
+func (c *LLBConverterImpl) cloneValue(original interface{}) interface{} {
+	if original == nil {
+		return nil
+	}
+	
+	switch v := original.(type) {
+	case map[string]interface{}:
+		return c.cloneMap(v)
+	case []interface{}:
+		cloned := make([]interface{}, len(v))
+		for i, item := range v {
+			cloned[i] = c.cloneValue(item)
+		}
+		return cloned
+	case []string:
+		cloned := make([]string, len(v))
+		copy(cloned, v)
+		return cloned
+	case map[string]string:
+		cloned := make(map[string]string)
+		for k, val := range v {
+			cloned[k] = val
+		}
+		return cloned
+	default:
+		return original
+	}
 }
