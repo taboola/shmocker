@@ -405,19 +405,30 @@ func (c *ClientImpl) Close() error {
 
 // parseReference parses a registry reference into components.
 func (c *ClientImpl) parseReference(ref string) (registry, repo, tag string, err error) {
-	parts := strings.Split(ref, "/")
-	if len(parts) < 2 {
+	if ref == "" {
 		return "", "", "", errors.New("invalid reference format")
 	}
 
-	// Extract registry (first part)
-	registry = parts[0]
-	if !strings.Contains(registry, ".") && !strings.Contains(registry, ":") {
+	// Handle simple references like "nginx" or "nginx:latest"
+	if !strings.Contains(ref, "/") {
 		// No registry specified, assume Docker Hub
 		registry = "registry-1.docker.io"
 		repo = ref
 	} else {
-		repo = strings.Join(parts[1:], "/")
+		parts := strings.Split(ref, "/")
+		if len(parts) < 2 {
+			return "", "", "", errors.New("invalid reference format")
+		}
+
+		// Extract registry (first part)
+		registry = parts[0]
+		if !strings.Contains(registry, ".") && !strings.Contains(registry, ":") {
+			// No registry specified, assume Docker Hub
+			registry = "registry-1.docker.io"
+			repo = ref
+		} else {
+			repo = strings.Join(parts[1:], "/")
+		}
 	}
 
 	// Extract tag
@@ -622,13 +633,13 @@ func (c *ClientImpl) putManifest(ctx context.Context, registryURL, repo, tag str
 	}
 
 	// Return the manifest digest from Docker-Content-Digest header
-	digest := resp.Header.Get("Docker-Content-Digest")
-	if digest == "" {
+	manifestDigest := resp.Header.Get("Docker-Content-Digest")
+	if manifestDigest == "" {
 		// Calculate digest if not provided
-		digest = digest.FromBytes(manifestData).String()
+		manifestDigest = digest.FromBytes(manifestData).String()
 	}
 
-	return digest, nil
+	return manifestDigest, nil
 }
 
 // getBlob retrieves a blob from the registry.
@@ -854,5 +865,12 @@ func (m *ManifestStoreImpl) Delete(ctx context.Context, ref string) error {
 
 // List returns all manifest references.
 func (m *ManifestStoreImpl) List(ctx context.Context) ([]string, error) {
-	return m.client.ListTags(ctx, m.repo)
+	// Construct full reference for ListTags
+	// Strip protocol from registry URL if present
+	registry := m.registry
+	registry = strings.TrimPrefix(registry, "http://")
+	registry = strings.TrimPrefix(registry, "https://")
+	
+	fullRef := registry + "/" + m.repo
+	return m.client.ListTags(ctx, fullRef)
 }

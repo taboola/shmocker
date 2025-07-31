@@ -95,6 +95,9 @@ const (
 
 // NewRegistryCacheExporter creates a new registry cache exporter.
 func NewRegistryCacheExporter(client Client, config *RegistryCacheConfig) cache.Exporter {
+	if config == nil {
+		config = &RegistryCacheConfig{}
+	}
 	if config.MaxConcurrentUploads == 0 {
 		config.MaxConcurrentUploads = 5
 	}
@@ -117,7 +120,6 @@ func (e *RegistryCacheExporter) Export(ctx context.Context, req *cache.ExportReq
 	startTime := time.Now()
 	result := &cache.ExportResult{
 		Destination: e.getRepositoryRef(req.Config.Destination),
-		StartTime:   startTime,
 	}
 
 	// Create cache manifest
@@ -176,7 +178,7 @@ func (e *RegistryCacheExporter) Export(ctx context.Context, req *cache.ExportReq
 	
 	// Upload manifest
 	manifestRef := e.getRepositoryRef(req.Config.Destination)
-	manifestData, err := json.Marshal(manifest)
+	_, err = json.Marshal(manifest)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal cache manifest")
 	}
@@ -217,6 +219,9 @@ func (e *RegistryCacheExporter) ValidateExportConfig(config *cache.ExportConfig)
 
 // NewRegistryCacheImporter creates a new registry cache importer.
 func NewRegistryCacheImporter(client Client, config *RegistryCacheConfig) cache.Importer {
+	if config == nil {
+		config = &RegistryCacheConfig{}
+	}
 	if config.MaxConcurrentDownloads == 0 {
 		config.MaxConcurrentDownloads = 5
 	}
@@ -238,8 +243,7 @@ func (i *RegistryCacheImporter) Import(ctx context.Context, req *cache.ImportReq
 
 	startTime := time.Now()
 	result := &cache.ImportResult{
-		Source:    req.Config.Source,
-		StartTime: startTime,
+		Source: req.Config.Source,
 	}
 
 	// Get cache manifest

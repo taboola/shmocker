@@ -4,6 +4,7 @@ package registry
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"net/http"
@@ -63,6 +64,11 @@ func IsRetryable(err error) bool {
 		return false
 	}
 
+	// Context timeout/cancellation are not retryable (check first)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+
 	// Check if it's already wrapped as RetryableError
 	var retryableErr *RetryableError
 	if errors.As(err, &retryableErr) {
@@ -87,11 +93,6 @@ func IsRetryable(err error) bool {
 		strings.Contains(err.Error(), "broken pipe") ||
 		strings.Contains(err.Error(), "no such host") {
 		return true
-	}
-
-	// Context timeout/cancellation are not retryable
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return false
 	}
 
 	return false
