@@ -1,0 +1,266 @@
+# Lima configuration for BuildKit VM
+# This file defines a virtual machine optimized for running BuildKit on macOS
+
+# VM metadata
+vmType: "qemu"
+arch: "x86_64"
+os: "Linux"
+
+# Hardware configuration optimized for container builds
+cpus: 4
+memory: "8GiB"
+disk: "64GiB"
+
+# Container runtime and BuildKit configuration
+images:
+  # Use Ubuntu LTS as base image for stability and broad compatibility
+  - location: "https://cloud-images.ubuntu.com/releases/22.04/release-20231215/ubuntu-22.04-server-cloudimg-amd64.img"
+    arch: "x86_64"
+    digest: "sha256:de5e632e17f0e8b0d8d8660f1de3c0d1d4d0a6f6c7a8a0a3e7d4c1b0f0a7e8d4"
+
+# Network configuration to enable buildkit daemon access from host
+networks:
+  # Default user network for internet access
+  - lima: "user-v2"
+  # Shared network for buildkit daemon communication
+  - lima: "shared"
+    macAddress: "de:ad:be:ef:00:01"
+    interface: "buildkit0"
+
+# Port forwarding for BuildKit daemon
+portForwards:
+  # BuildKit daemon gRPC API (secure by default)
+  - guestPort: 1234
+    hostPort: 1234
+    protocol: tcp
+  # Optional: BuildKit debug server
+  - guestPort: 6060
+    hostPort: 6060
+    protocol: tcp
+
+# Mount host directories for build context and cache
+mounts:
+  # Mount host's shmocker cache directory for build cache persistence
+  - location: "~/.shmocker/cache"
+    mountPoint: "/var/lib/buildkit/cache"
+    writable: true
+  # Mount temporary directory for build contexts
+  - location: "/tmp/shmocker-builds"
+    mountPoint: "/tmp/builds"
+    writable: true
+  # Mount host's container registry cache if it exists
+  - location: "~/.docker"
+    mountPoint: "/home/buildkit/.docker"
+    writable: true
+
+# SSH configuration
+ssh:
+  localPort: 60022
+  loadDotSSHPubKeys: true
+
+# User and group configuration for buildkit
+provision:
+  # System setup script
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      
+      # Update package lists
+      apt-get update
+      
+      # Install required packages for BuildKit
+      apt-get install -y \
+        containerd \
+        runc \
+        uidmap \
+        dbus-user-session \
+        fuse-overlayfs \
+        slirp4netns \
+        rootlesskit \
+        curl \
+        wget \
+        ca-certificates \
+        gnupg \
+        lsb-release \
+        jq
+      
+      # Create buildkit user and group
+      useradd -m -s /bin/bash -u 1000 buildkit || true
+      usermod -aG docker buildkit || true
+      
+      # Enable systemd user services for buildkit user
+      systemctl enable dbus
+      loginctl enable-linger buildkit
+      
+      # Configure containerd for rootless operation
+      mkdir -p /etc/containerd
+      containerd config default | sed 's/SystemdCgroup = false/SystemdCgroup = true/' > /etc/containerd/config.toml
+      systemctl enable containerd
+      systemctl start containerd
+      
+      # Setup directories with proper permissions
+      mkdir -p /var/lib/buildkit
+      mkdir -p /var/lib/buildkit/cache
+      mkdir -p /tmp/builds
+      chown -R buildkit:buildkit /var/lib/buildkit
+      chown -R buildkit:buildkit /tmp/builds
+      
+      # Allow buildkit user to access docker socket if it exists
+      if [ -S /var/run/docker.sock ]; then
+        chown root:docker /var/run/docker.sock
+        chmod 660 /var/run/docker.sock
+      fi
+
+  # BuildKit daemon setup
+  - mode: user
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      
+      # Install BuildKit from official releases
+      BUILDKIT_VERSION="v0.12.4"
+      BUILDKIT_ARCH="amd64"
+      
+      # Download and install BuildKit
+      cd /tmp
+      wget -q "https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-${BUILDKIT_ARCH}.tar.gz"
+      tar -xzf "buildkit-${BUILDKIT_VERSION}.linux-${BUILDKIT_ARCH}.tar.gz"
+      sudo mv bin/* /usr/local/bin/
+      rm -rf bin/ "buildkit-${BUILDKIT_VERSION}.linux-${BUILDKIT_ARCH}.tar.gz"
+      
+      # Create BuildKit configuration directory
+      mkdir -p ~/.config/buildkit
+      
+      # Create BuildKit daemon configuration
+      cat > ~/.config/buildkit/buildkitd.toml << 'EOF'
+      # BuildKit daemon configuration for shmocker
+      debug = false
+      insecure-entitlements = []
+      
+      [grpc]
+        address = ["unix:///run/user/1000/buildkit/buildkitd.sock", "tcp://0.0.0.0:1234"]
+        debugAddress = "0.0.0.0:6060"
+      
+      [worker.oci]
+        enabled = true
+        platforms = ["linux/amd64", "linux/arm64", "linux/arm/v7", "linux/arm/v6", "linux/386", "linux/ppc64le", "linux/s390x"]
+        snapshotter = "overlayfs"
+        rootless = true
+        
+        # Configure for optimal performance
+        [worker.oci.gc]
+          gc = true
+          gckeepstorage = "10gb"
+          
+        [worker.oci.gcpolicy]
+          keepDuration = "168h"  # 1 week
+          keepBytes = "5gb"
+          filters = ["until=168h"]
+      
+      [worker.containerd]
+        enabled = false
+      
+      # Registry configuration
+      [registry]
+        [registry."docker.io"]
+          mirrors = ["https://registry-1.docker.io"]
+        [registry."gcr.io"]
+          mirrors = ["https://gcr.io"]
+        [registry."ghcr.io"]
+          mirrors = ["https://ghcr.io"]
+      EOF
+      
+      # Create systemd user service for BuildKit daemon
+      mkdir -p ~/.config/systemd/user
+      cat > ~/.config/systemd/user/buildkit.service << 'EOF'
+      [Unit]
+      Description=BuildKit daemon
+      Documentation=https://github.com/moby/buildkit
+      
+      [Service]
+      Type=simple
+      ExecStart=/usr/local/bin/buildkitd --config=%h/.config/buildkit/buildkitd.toml
+      Restart=always
+      RestartSec=5
+      KillMode=mixed
+      KillSignal=SIGTERM
+      TimeoutStopSec=30
+      
+      # Resource limits
+      LimitNOFILE=65536
+      LimitNPROC=8192
+      
+      # Security settings
+      NoNewPrivileges=true
+      ProtectSystem=strict
+      ProtectHome=false
+      PrivateTmp=true
+      
+      # Environment
+      Environment=BUILDKIT_HOST=unix:///run/user/1000/buildkit/buildkitd.sock
+      Environment=XDG_RUNTIME_DIR=/run/user/1000
+      
+      [Install]
+      WantedBy=default.target
+      EOF
+      
+      # Create runtime directory for BuildKit
+      mkdir -p /run/user/1000/buildkit
+      
+      # Enable and start the BuildKit service
+      systemctl --user daemon-reload
+      systemctl --user enable buildkit.service
+      systemctl --user start buildkit.service
+      
+      # Verify BuildKit is running
+      sleep 5
+      if systemctl --user is-active --quiet buildkit.service; then
+        echo "BuildKit daemon started successfully"
+        /usr/local/bin/buildctl --addr unix:///run/user/1000/buildkit/buildkitd.sock debug workers
+      else
+        echo "Failed to start BuildKit daemon"
+        systemctl --user status buildkit.service
+        exit 1
+      fi
+      
+      # Create convenience script for BuildKit client
+      cat > ~/buildctl.sh << 'EOF'
+      #!/bin/bash
+      # Convenience script to run buildctl with correct socket
+      exec /usr/local/bin/buildctl --addr unix:///run/user/1000/buildkit/buildkitd.sock "$@"
+      EOF
+      chmod +x ~/buildctl.sh
+
+# Host resolver configuration
+hostResolver:
+  # Enable host resolver for better DNS resolution
+  enabled: true
+  hosts:
+    host.lima.internal: host.ip
+
+# Timezone synchronization
+timezone: null  # Use host timezone
+
+# Enable rosetta for x86_64 emulation on Apple Silicon if needed
+rosetta:
+  enabled: false
+  binfmt: false
+
+# Video display (not needed for headless BuildKit)
+video:
+  display: none
+
+# Audio (not needed for BuildKit)
+audio:
+  device: none
+
+# Firmware configuration
+firmware:
+  # Use UEFI for better compatibility
+  legacyBios: false
+
+# Additional Lima metadata
+containerd:
+  system: false
+  user: false
