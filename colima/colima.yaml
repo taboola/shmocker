@@ -1,0 +1,191 @@
+# Colima configuration for shmocker BuildKit
+# This file configures a virtual machine optimized for container builds
+
+# VM configuration - these will be overridden by the setup script
+# based on system resources, but provide sensible defaults
+cpu: 4
+memory: 8
+disk: 64
+
+# Use QEMU for better performance and compatibility across architectures
+vmType: qemu
+
+# Container runtime - use containerd for BuildKit compatibility
+runtime: containerd
+
+# Network configuration
+network:
+  address: true
+  dns: []
+  dnsHosts: {}
+
+# Disable Kubernetes as we only need container runtime
+kubernetes:
+  enabled: false
+
+# Docker daemon configuration with BuildKit enabled
+docker:
+  features:
+    buildkit: true
+
+# Disable SSH agent forwarding for security
+forwardAgent: false
+
+# Mount configuration for build context and cache
+mounts:
+  - location: ~/.shmocker/cache
+    mountPoint: /var/lib/buildkit/cache
+    writable: true
+  - location: /tmp/shmocker-builds
+    mountPoint: /tmp/builds
+    writable: true
+  - location: ~/.docker
+    mountPoint: /home/user/.docker
+    writable: true
+
+# Provisioning scripts to set up BuildKit
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      
+      # Update package lists
+      apt-get update
+      
+      # Install required packages for BuildKit
+      apt-get install -y \
+        curl \
+        wget \
+        ca-certificates \
+        gnupg \
+        lsb-release \
+        jq \
+        uidmap \
+        dbus-user-session \
+        fuse-overlayfs \
+        slirp4netns
+      
+      # Setup directories with proper permissions
+      mkdir -p /var/lib/buildkit/cache
+      mkdir -p /tmp/builds
+      chown -R 1000:1000 /var/lib/buildkit
+      chown -R 1000:1000 /tmp/builds
+
+  - mode: user
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      
+      # Install BuildKit from official releases
+      BUILDKIT_VERSION="v0.12.4"
+      BUILDKIT_ARCH="amd64"
+      
+      # Download and install BuildKit
+      cd /tmp
+      wget -q "https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-${BUILDKIT_ARCH}.tar.gz"
+      tar -xzf "buildkit-${BUILDKIT_VERSION}.linux-${BUILDKIT_ARCH}.tar.gz"
+      sudo mv bin/* /usr/local/bin/
+      rm -rf bin/ "buildkit-${BUILDKIT_VERSION}.linux-${BUILDKIT_ARCH}.tar.gz"
+      
+      # Create BuildKit configuration directory
+      mkdir -p ~/.config/buildkit
+      
+      # Create BuildKit daemon configuration
+      cat > ~/.config/buildkit/buildkitd.toml << 'BUILDKIT_EOF'
+      # BuildKit daemon configuration for shmocker with Colima
+      debug = false
+      insecure-entitlements = []
+      
+      [grpc]
+        address = ["unix:///run/user/1000/buildkit/buildkitd.sock"]
+        debugAddress = "0.0.0.0:6060"
+      
+      [worker.oci]
+        enabled = true
+        platforms = ["linux/amd64", "linux/arm64", "linux/arm/v7", "linux/arm/v6", "linux/386", "linux/ppc64le", "linux/s390x"]
+        snapshotter = "overlayfs"
+        rootless = true
+        
+        # Configure for optimal performance
+        [worker.oci.gc]
+          gc = true
+          gckeepstorage = "10gb"
+          
+        [worker.oci.gcpolicy]
+          keepDuration = "168h"  # 1 week
+          keepBytes = "5gb"
+          filters = ["until=168h"]
+      
+      [worker.containerd]
+        enabled = false
+      
+      # Registry configuration
+      [registry]
+        [registry."docker.io"]
+          mirrors = ["https://registry-1.docker.io"]
+        [registry."gcr.io"]
+          mirrors = ["https://gcr.io"]
+        [registry."ghcr.io"]
+          mirrors = ["https://ghcr.io"]
+      BUILDKIT_EOF
+      
+      # Create systemd user service for BuildKit daemon
+      mkdir -p ~/.config/systemd/user
+      cat > ~/.config/systemd/user/buildkit.service << 'SERVICE_EOF'
+      [Unit]
+      Description=BuildKit daemon for shmocker
+      Documentation=https://github.com/moby/buildkit
+      
+      [Service]
+      Type=simple
+      ExecStart=/usr/local/bin/buildkitd --config=%h/.config/buildkit/buildkitd.toml
+      Restart=always
+      RestartSec=5
+      KillMode=mixed
+      KillSignal=SIGTERM
+      TimeoutStopSec=30
+      
+      # Resource limits
+      LimitNOFILE=65536
+      LimitNPROC=8192
+      
+      # Security settings
+      NoNewPrivileges=true
+      ProtectSystem=strict
+      ProtectHome=false
+      PrivateTmp=true
+      
+      # Environment
+      Environment=BUILDKIT_HOST=unix:///run/user/1000/buildkit/buildkitd.sock
+      Environment=XDG_RUNTIME_DIR=/run/user/1000
+      
+      [Install]
+      WantedBy=default.target
+      SERVICE_EOF
+      
+      # Create runtime directory for BuildKit
+      mkdir -p /run/user/1000/buildkit
+      
+      # Enable systemd user services
+      systemctl --user daemon-reload
+      systemctl --user enable buildkit.service
+      systemctl --user start buildkit.service
+      
+      # Verify BuildKit is running
+      sleep 5
+      if systemctl --user is-active --quiet buildkit.service; then
+        echo "BuildKit daemon started successfully"
+        /usr/local/bin/buildctl --addr unix:///run/user/1000/buildkit/buildkitd.sock debug workers || true
+      else
+        echo "Failed to start BuildKit daemon"
+        systemctl --user status buildkit.service || true
+      fi
+      
+      # Create convenience script for BuildKit client
+      cat > ~/buildctl.sh << 'BUILDCTL_EOF'
+      #!/bin/bash
+      # Convenience script to run buildctl with correct socket
+      exec /usr/local/bin/buildctl --addr unix:///run/user/1000/buildkit/buildkitd.sock "$@"
+      BUILDCTL_EOF
+      chmod +x ~/buildctl.sh
