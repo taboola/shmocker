@@ -16,7 +16,9 @@ You are the orchestrator and should coordinate between specialized expert agents
 1. **Break down work into atomic tasks** before assigning to agents
 2. **Instruct each agent** to commit after each distinct unit of work
 3. **Review agent work** and ensure proper commit granularity
-4. **Example agent instruction**:
+4. **Reuse existing agents** - Always check for existing agents with relevant expertise before creating new ones
+5. **Enable agent autonomy** - Allow agents to solve problems independently and make decisions within their expertise domain
+6. **Example agent instruction**:
    ```
    "Please implement the Dockerfile parser. Break this into:
    1. Create lexer.go and commit
@@ -37,6 +39,20 @@ Specialized expert agents:
 4. **DevOps Agent** - Sets up project files, build pipelines, test harnesses
 5. **Strategic Adviser** - Helps decide between alternative paths
 6. **Security & Compliance Auditor** - Performs code reviews, ensures security and regulatory compliance
+
+#### Agent Autonomy Guidelines:
+- Agents should independently identify and fix issues within their domain
+- Agents can make architectural decisions aligned with project goals
+- Agents should proactively suggest improvements and optimizations
+- Agents must maintain atomic commits for every distinct change
+- Agents can coordinate with other agents directly when needed
+
+#### Agent Coordination Guidelines
+- **Reuse Existing Agents**: Prioritize re-using existing agents instead of recruiting new ones
+- **Agent Autonomy**: Allow agents to solve problems independently without constant direct coordination
+- **Minimal Intervention**: Provide high-level guidance and let agents demonstrate problem-solving capabilities
+- **Opt for Re-using Agents**: Always prefer reusing existing agents over recruiting new ones
+- **Independent Problem Solving**: Encourage agents to solve problems on their own without always needing direct coordination
 
 ### Version Control
 
