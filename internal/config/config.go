@@ -163,7 +163,12 @@ func (c *Config) GetBuildKitRoot() string {
 	if c.BuildKitRoot != "" {
 		return c.BuildKitRoot
 	}
-	return filepath.Join(homeDir(), ".shmocker", "buildkit")
+	// Use project-local directory
+	workDir, err := os.Getwd()
+	if err != nil {
+		return ".shmocker/buildkit"
+	}
+	return filepath.Join(workDir, ".shmocker", "buildkit")
 }
 
 // GetBuildKitDataRoot returns the BuildKit data root directory
