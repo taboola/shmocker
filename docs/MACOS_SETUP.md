@@ -1,14 +1,41 @@
-# macOS Setup Guide for shmocker with Lima
+# macOS Setup Guide for shmocker
 
-This guide helps you set up shmocker to build real container images on macOS using Lima and BuildKit.
+This guide helps you set up shmocker to build real container images on macOS using virtualization and BuildKit.
 
 ## Overview
 
-On macOS, shmocker uses [Lima](https://lima-vm.io/) to run BuildKit in a Linux virtual machine. This provides full container building capabilities while maintaining security and performance.
+On macOS, shmocker can use virtualization to run BuildKit in a Linux virtual machine. We provide two options:
 
-## Quick Start
+### Option 1: Colima (Recommended)
 
-1. **Run the setup script:**
+[Colima](https://github.com/abiosoft/colima) is a simpler alternative specifically designed for container workloads:
+
+- **Easier setup and management**
+- **Optimized for container builds**  
+- **Better Docker compatibility**
+- **Automatic resource management**
+
+**Setup:** See [macOS Setup with Colima](MACOS_SETUP_COLIMA.md)
+
+### Option 2: Lima (Advanced)
+
+[Lima](https://lima-vm.io/) provides maximum flexibility and customization:
+
+- **Fine-grained VM control**
+- **Custom configuration options**
+- **General purpose VM usage**
+
+**Setup:** Continue with this guide for Lima setup
+
+---
+
+## Lima Setup Guide
+
+This section covers setting up shmocker with Lima for users who need advanced VM customization.
+
+## Lima Quick Start
+
+1. **Run the Lima setup script:**
    ```bash
    ./scripts/setup-macos.sh
    ```
@@ -19,6 +46,8 @@ On macOS, shmocker uses [Lima](https://lima-vm.io/) to run BuildKit in a Linux v
    ```
 
 That's it! The setup script handles everything automatically.
+
+**Note:** For easier setup, consider using [Colima instead](MACOS_SETUP_COLIMA.md).
 
 ## What Gets Installed
 
