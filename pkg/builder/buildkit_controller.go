@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package builder
 
 import (
@@ -37,7 +40,7 @@ func NewBuildKitController(ctx context.Context, opts *BuildKitOptions) (BuildKit
 	if opts == nil {
 		opts = &BuildKitOptions{}
 	}
-	
+
 	// Set default options
 	if opts.Root == "" {
 		homeDir, err := os.UserHomeDir()
@@ -46,26 +49,26 @@ func NewBuildKitController(ctx context.Context, opts *BuildKitOptions) (BuildKit
 		}
 		opts.Root = filepath.Join(homeDir, ".shmocker", "buildkit")
 	}
-	
+
 	if opts.DataRoot == "" {
 		opts.DataRoot = filepath.Join(opts.Root, "data")
 	}
-	
+
 	// Ensure directories exist
 	if err := os.MkdirAll(opts.Root, 0755); err != nil {
 		return nil, errors.Wrap(err, "failed to create root directory")
 	}
-	
+
 	if err := os.MkdirAll(opts.DataRoot, 0755); err != nil {
 		return nil, errors.Wrap(err, "failed to create data root directory")
 	}
-	
+
 	// Create rootless OCI worker
 	worker, err := createRootlessWorker(ctx, opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create rootless worker")
 	}
-	
+
 	// Create controller
 	controller, err := control.NewController(control.Opt{
 		WorkerController: &workerController{worker: worker},
@@ -76,7 +79,7 @@ func NewBuildKitController(ctx context.Context, opts *BuildKitOptions) (BuildKit
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create controller")
 	}
-	
+
 	return &buildKitController{
 		controller: controller,
 		worker:     worker,
@@ -98,42 +101,42 @@ func (c *buildKitController) Solve(ctx context.Context, def *SolveDefinition) (*
 	if def == nil {
 		return nil, errors.New("solve definition cannot be nil")
 	}
-	
+
 	// Create solve request
 	req := &control.SolveRequest{
 		Definition: &pb.Definition{
 			Def: def.Definition,
 		},
-		Frontend:       def.Frontend,
-		FrontendAttrs:  make(map[string]string),
-		ExporterAttrs:  make(map[string]string),
-		Session:        session.NewSession(ctx, "shmocker", ""),
+		Frontend:      def.Frontend,
+		FrontendAttrs: make(map[string]string),
+		ExporterAttrs: make(map[string]string),
+		Session:       session.NewSession(ctx, "shmocker", ""),
 	}
-	
+
 	// Add metadata to frontend attributes
 	for k, v := range def.Metadata {
 		req.FrontendAttrs[k] = string(v)
 	}
-	
+
 	// Execute solve
 	res, err := c.controller.Solve(ctx, req)
 	if err != nil {
 		return nil, errors.Wrap(err, "solve failed")
 	}
-	
+
 	result := &SolveResult{
 		Metadata: make(map[string][]byte),
 	}
-	
+
 	if res.Ref != nil {
 		result.Ref = res.Ref.ID()
 	}
-	
+
 	// Copy metadata
 	for k, v := range res.Metadata {
 		result.Metadata[k] = v
 	}
-	
+
 	return result, nil
 }
 
@@ -142,7 +145,7 @@ func (c *buildKitController) ImportCache(ctx context.Context, imports []*CacheIm
 	if len(imports) == 0 {
 		return nil
 	}
-	
+
 	// TODO: Implement cache import using BuildKit's remote cache
 	// This would involve setting up cache importers based on the cache type
 	for _, imp := range imports {
@@ -160,7 +163,7 @@ func (c *buildKitController) ImportCache(ctx context.Context, imports []*CacheIm
 			return errors.Errorf("unsupported cache import type: %s", imp.Type)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -169,7 +172,7 @@ func (c *buildKitController) ExportCache(ctx context.Context, exports []*CacheEx
 	if len(exports) == 0 {
 		return nil
 	}
-	
+
 	// TODO: Implement cache export using BuildKit's remote cache
 	for _, exp := range exports {
 		switch exp.Type {
@@ -186,7 +189,7 @@ func (c *buildKitController) ExportCache(ctx context.Context, exports []*CacheEx
 			return errors.Errorf("unsupported cache export type: %s", exp.Type)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -271,10 +274,10 @@ type buildKitExecutor struct {
 
 func (e *buildKitExecutor) Run(ctx context.Context, step *ExecutionStep) (*ExecutionResult, error) {
 	start := time.Now()
-	
+
 	// TODO: Implement actual execution using the worker's executor
 	// This would involve creating a proper execution environment and running the step
-	
+
 	return &ExecutionResult{
 		ExitCode: 0,
 		Duration: time.Since(start),
@@ -305,12 +308,12 @@ func createRootlessWorker(ctx context.Context, opts *BuildKitOptions) (*runc.Wor
 		RootDir:       opts.DataRoot,
 		Debug:         opts.Debug,
 	}
-	
+
 	// Create rootless worker using runc
 	worker, err := runc.NewWorker(ctx, workerOpts)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create runc worker")
 	}
-	
+
 	return worker, nil
 }

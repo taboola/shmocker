@@ -17,7 +17,7 @@ func TestBuildError_Error(t *testing.T) {
 func TestBuildError_Unwrap(t *testing.T) {
 	cause := errors.New("underlying error")
 	err := NewBuildError(ErrorTypeDockerfile, "test error", cause)
-	
+
 	if err.Unwrap() != cause {
 		t.Errorf("Expected unwrapped error to be the cause")
 	}
@@ -26,7 +26,7 @@ func TestBuildError_Unwrap(t *testing.T) {
 func TestBuildError_WithStep(t *testing.T) {
 	err := NewBuildError(ErrorTypeDockerfile, "test error", nil)
 	err.WithStep("RUN apt-get update")
-	
+
 	if err.Step != "RUN apt-get update" {
 		t.Errorf("Expected step to be set")
 	}
@@ -36,11 +36,11 @@ func TestBuildError_WithSuggestions(t *testing.T) {
 	err := NewBuildError(ErrorTypeDockerfile, "test error", nil)
 	suggestions := []string{"suggestion 1", "suggestion 2"}
 	err.WithSuggestions(suggestions...)
-	
+
 	if len(err.Suggestions) != 2 {
 		t.Errorf("Expected 2 suggestions, got %d", len(err.Suggestions))
 	}
-	
+
 	if err.Suggestions[0] != "suggestion 1" || err.Suggestions[1] != "suggestion 2" {
 		t.Errorf("Suggestions not set correctly")
 	}
@@ -50,11 +50,11 @@ func TestBuildError_WithContext(t *testing.T) {
 	err := NewBuildError(ErrorTypeDockerfile, "test error", nil)
 	err.WithContext("file", "Dockerfile")
 	err.WithContext("line", 5)
-	
+
 	if err.Context["file"] != "Dockerfile" {
 		t.Errorf("Expected context file to be Dockerfile")
 	}
-	
+
 	if err.Context["line"] != 5 {
 		t.Errorf("Expected context line to be 5")
 	}
@@ -66,9 +66,9 @@ func TestBuildError_FormatUserError(t *testing.T) {
 	err.WithStep("FROM alpine:latest")
 	err.WithSuggestions("Check syntax", "Verify format")
 	err.WithContext("line", 1)
-	
+
 	formatted := err.FormatUserError()
-	
+
 	// Check that all components are included
 	expectedComponents := []string{
 		"Build failed: Dockerfile syntax error",
@@ -79,7 +79,7 @@ func TestBuildError_FormatUserError(t *testing.T) {
 		"• Check syntax",
 		"• Verify format",
 	}
-	
+
 	for _, component := range expectedComponents {
 		if !strings.Contains(formatted, component) {
 			t.Errorf("Expected formatted error to contain '%s'\nGot: %s", component, formatted)
@@ -89,12 +89,12 @@ func TestBuildError_FormatUserError(t *testing.T) {
 
 func TestErrorClassifier_ClassifyError(t *testing.T) {
 	classifier := NewErrorClassifier()
-	
+
 	tests := []struct {
-		name          string
-		inputError    error
-		expectedType  BuildErrorType
-		expectedMsg   string
+		name         string
+		inputError   error
+		expectedType BuildErrorType
+		expectedMsg  string
 	}{
 		{
 			name:         "already BuildError",
@@ -163,24 +163,24 @@ func TestErrorClassifier_ClassifyError(t *testing.T) {
 			expectedMsg:  "Unknown build error",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := classifier.ClassifyError(tt.inputError)
-			
+
 			if result == nil {
 				t.Errorf("Expected non-nil result")
 				return
 			}
-			
+
 			if result.Type != tt.expectedType {
 				t.Errorf("Expected type %s, got %s", tt.expectedType, result.Type)
 			}
-			
+
 			if result.Message != tt.expectedMsg {
 				t.Errorf("Expected message '%s', got '%s'", tt.expectedMsg, result.Message)
 			}
-			
+
 			// Check that suggestions are provided
 			if len(result.Suggestions) == 0 {
 				t.Errorf("Expected suggestions to be provided")
@@ -191,7 +191,7 @@ func TestErrorClassifier_ClassifyError(t *testing.T) {
 
 func TestErrorClassifier_IsContextError(t *testing.T) {
 	classifier := NewErrorClassifier()
-	
+
 	tests := []struct {
 		message  string
 		expected bool
@@ -204,7 +204,7 @@ func TestErrorClassifier_IsContextError(t *testing.T) {
 		{"syntax error in dockerfile", false},
 		{"package not found", false},
 	}
-	
+
 	for _, tt := range tests {
 		result := classifier.isContextError(tt.message)
 		if result != tt.expected {
@@ -215,7 +215,7 @@ func TestErrorClassifier_IsContextError(t *testing.T) {
 
 func TestErrorClassifier_IsDockerfileError(t *testing.T) {
 	classifier := NewErrorClassifier()
-	
+
 	tests := []struct {
 		message  string
 		expected bool
@@ -228,7 +228,7 @@ func TestErrorClassifier_IsDockerfileError(t *testing.T) {
 		{"network timeout", false},
 		{"permission denied", false},
 	}
-	
+
 	for _, tt := range tests {
 		result := classifier.isDockerfileError(tt.message)
 		if result != tt.expected {
@@ -239,7 +239,7 @@ func TestErrorClassifier_IsDockerfileError(t *testing.T) {
 
 func TestErrorClassifier_IsDependencyError(t *testing.T) {
 	classifier := NewErrorClassifier()
-	
+
 	tests := []struct {
 		message  string
 		expected bool
@@ -252,7 +252,7 @@ func TestErrorClassifier_IsDependencyError(t *testing.T) {
 		{"dockerfile parse error", false},
 		{"network timeout", false},
 	}
-	
+
 	for _, tt := range tests {
 		result := classifier.isDependencyError(tt.message)
 		if result != tt.expected {
@@ -263,7 +263,7 @@ func TestErrorClassifier_IsDependencyError(t *testing.T) {
 
 func TestErrorClassifier_IsNetworkError(t *testing.T) {
 	classifier := NewErrorClassifier()
-	
+
 	tests := []struct {
 		message  string
 		expected bool
@@ -276,7 +276,7 @@ func TestErrorClassifier_IsNetworkError(t *testing.T) {
 		{"dockerfile parse error", false},
 		{"package not found", false},
 	}
-	
+
 	for _, tt := range tests {
 		result := classifier.isNetworkError(tt.message)
 		if result != tt.expected {
@@ -287,7 +287,7 @@ func TestErrorClassifier_IsNetworkError(t *testing.T) {
 
 func TestErrorClassifier_IsResourceError(t *testing.T) {
 	classifier := NewErrorClassifier()
-	
+
 	tests := []struct {
 		message  string
 		expected bool
@@ -300,7 +300,7 @@ func TestErrorClassifier_IsResourceError(t *testing.T) {
 		{"dockerfile parse error", false},
 		{"network timeout", false},
 	}
-	
+
 	for _, tt := range tests {
 		result := classifier.isResourceError(tt.message)
 		if result != tt.expected {
@@ -312,24 +312,24 @@ func TestErrorClassifier_IsResourceError(t *testing.T) {
 func TestWrapError(t *testing.T) {
 	originalErr := errors.New("original error message")
 	step := "RUN apt-get update"
-	
+
 	wrappedErr := WrapError(originalErr, step)
-	
+
 	if wrappedErr == nil {
 		t.Errorf("Expected non-nil wrapped error")
 		return
 	}
-	
+
 	buildErr, ok := wrappedErr.(*BuildError)
 	if !ok {
 		t.Errorf("Expected BuildError type")
 		return
 	}
-	
+
 	if buildErr.Step != step {
 		t.Errorf("Expected step '%s', got '%s'", step, buildErr.Step)
 	}
-	
+
 	if buildErr.Cause != originalErr {
 		t.Errorf("Expected cause to be original error")
 	}
@@ -369,7 +369,7 @@ func TestIsRetryableError(t *testing.T) {
 			expected: false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := IsRetryableError(tt.error)
@@ -397,7 +397,7 @@ func TestGetErrorType(t *testing.T) {
 			expected: ErrorTypeUnknown,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := GetErrorType(tt.error)

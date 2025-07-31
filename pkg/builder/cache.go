@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package builder
 
 import (
@@ -100,7 +103,7 @@ func (cm *CacheManager) importRegistryCache(ctx context.Context, imp *CacheImpor
 	// Configure importer attributes
 	attrs := make(map[string]string)
 	attrs["ref"] = imp.Ref
-	
+
 	// Add custom attributes
 	for k, v := range imp.Attrs {
 		attrs[k] = v
@@ -111,7 +114,7 @@ func (cm *CacheManager) importRegistryCache(ctx context.Context, imp *CacheImpor
 	// integrate this with BuildKit's solve process
 	_ = importer
 	_ = attrs
-	
+
 	return nil
 }
 
@@ -127,7 +130,7 @@ func (cm *CacheManager) exportRegistryCache(ctx context.Context, exp *CacheExpor
 	attrs := make(map[string]string)
 	attrs["ref"] = exp.Ref
 	attrs["mode"] = "max" // Default to max mode for better cache coverage
-	
+
 	// Add custom attributes
 	for k, v := range exp.Attrs {
 		attrs[k] = v
@@ -138,7 +141,7 @@ func (cm *CacheManager) exportRegistryCache(ctx context.Context, exp *CacheExpor
 	// integrate this with BuildKit's solve process
 	_ = exporter
 	_ = attrs
-	
+
 	return nil
 }
 
@@ -153,7 +156,7 @@ func (cm *CacheManager) importLocalCache(ctx context.Context, imp *CacheImport) 
 	// TODO: Implement local cache import
 	// This would involve reading cache metadata and content from the local directory
 	fmt.Printf("Importing local cache from: %s\n", cachePath)
-	
+
 	return nil
 }
 
@@ -168,7 +171,7 @@ func (cm *CacheManager) exportLocalCache(ctx context.Context, exp *CacheExport) 
 	// TODO: Implement local cache export
 	// This would involve writing cache metadata and content to the local directory
 	fmt.Printf("Exporting local cache to: %s\n", cachePath)
-	
+
 	return nil
 }
 
@@ -177,7 +180,7 @@ func (cm *CacheManager) importGHACache(ctx context.Context, imp *CacheImport) er
 	// GitHub Actions cache requires specific configuration
 	attrs := make(map[string]string)
 	attrs["url"] = imp.Ref
-	
+
 	// Add GitHub Actions specific attributes
 	for k, v := range imp.Attrs {
 		attrs[k] = v
@@ -190,7 +193,7 @@ func (cm *CacheManager) importGHACache(ctx context.Context, imp *CacheImport) er
 
 	// TODO: Implement GitHub Actions cache import
 	fmt.Printf("Importing GitHub Actions cache from: %s\n", imp.Ref)
-	
+
 	return nil
 }
 
@@ -199,7 +202,7 @@ func (cm *CacheManager) exportGHACache(ctx context.Context, exp *CacheExport) er
 	// GitHub Actions cache requires specific configuration
 	attrs := make(map[string]string)
 	attrs["url"] = exp.Ref
-	
+
 	// Add GitHub Actions specific attributes
 	for k, v := range exp.Attrs {
 		attrs[k] = v
@@ -212,7 +215,7 @@ func (cm *CacheManager) exportGHACache(ctx context.Context, exp *CacheExport) er
 
 	// TODO: Implement GitHub Actions cache export
 	fmt.Printf("Exporting GitHub Actions cache to: %s\n", exp.Ref)
-	
+
 	return nil
 }
 
@@ -220,14 +223,14 @@ func (cm *CacheManager) exportGHACache(ctx context.Context, exp *CacheExport) er
 func (cm *CacheManager) importS3Cache(ctx context.Context, imp *CacheImport) error {
 	// S3 cache requires specific configuration
 	attrs := make(map[string]string)
-	
+
 	// Parse S3 URL
 	if !strings.HasPrefix(imp.Ref, "s3://") {
 		return errors.New("S3 cache ref must start with s3://")
 	}
-	
+
 	attrs["bucket"] = imp.Ref
-	
+
 	// Add S3 specific attributes
 	for k, v := range imp.Attrs {
 		attrs[k] = v
@@ -243,7 +246,7 @@ func (cm *CacheManager) importS3Cache(ctx context.Context, imp *CacheImport) err
 
 	// TODO: Implement S3 cache import
 	fmt.Printf("Importing S3 cache from: %s\n", imp.Ref)
-	
+
 	return nil
 }
 
@@ -251,14 +254,14 @@ func (cm *CacheManager) importS3Cache(ctx context.Context, imp *CacheImport) err
 func (cm *CacheManager) exportS3Cache(ctx context.Context, exp *CacheExport) error {
 	// S3 cache requires specific configuration
 	attrs := make(map[string]string)
-	
+
 	// Parse S3 URL
 	if !strings.HasPrefix(exp.Ref, "s3://") {
 		return errors.New("S3 cache ref must start with s3://")
 	}
-	
+
 	attrs["bucket"] = exp.Ref
-	
+
 	// Add S3 specific attributes
 	for k, v := range exp.Attrs {
 		attrs[k] = v
@@ -274,7 +277,7 @@ func (cm *CacheManager) exportS3Cache(ctx context.Context, exp *CacheExport) err
 
 	// TODO: Implement S3 cache export
 	fmt.Printf("Exporting S3 cache to: %s\n", exp.Ref)
-	
+
 	return nil
 }
 
@@ -282,11 +285,11 @@ func (cm *CacheManager) exportS3Cache(ctx context.Context, exp *CacheExport) err
 func (cm *CacheManager) GetCacheStats(ctx context.Context) (*CacheStats, error) {
 	// TODO: Implement cache statistics collection
 	return &CacheStats{
-		TotalSize:    0,
-		HitCount:     0,
-		MissCount:    0,
-		ImportCount:  0,
-		ExportCount:  0,
+		TotalSize:   0,
+		HitCount:    0,
+		MissCount:   0,
+		ImportCount: 0,
+		ExportCount: 0,
 	}, nil
 }
 
@@ -299,11 +302,11 @@ func (cm *CacheManager) ClearCache(ctx context.Context, cacheDir string) error {
 
 // CacheStats contains cache usage statistics
 type CacheStats struct {
-	TotalSize    int64
-	HitCount     int64
-	MissCount    int64
-	ImportCount  int64
-	ExportCount  int64
+	TotalSize   int64
+	HitCount    int64
+	MissCount   int64
+	ImportCount int64
+	ExportCount int64
 }
 
 // ValidateCacheConfig validates cache import/export configuration

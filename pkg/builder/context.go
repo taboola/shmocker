@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package builder
 
 import (
@@ -256,7 +259,7 @@ func (cm *ContextManager) prepareHTTPContext(ctx context.Context, buildCtx *Buil
 			filename = "Dockerfile"
 		}
 		filePath := filepath.Join(httpDir, filename)
-		
+
 		file, err := os.Create(filePath)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create file")
@@ -485,15 +488,15 @@ func parseDockerignore(dockerignorePath string) ([]string, error) {
 
 	var patterns []string
 	scanner := fsutil.NewScanner(file)
-	
+
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		
+
 		// Skip empty lines and comments
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		
+
 		patterns = append(patterns, line)
 	}
 

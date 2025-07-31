@@ -1,0 +1,34 @@
+# Simple Dockerfile for testing shmocker build functionality
+FROM alpine:3.18
+
+# Set build arguments
+ARG VERSION=1.0.0
+
+# Set metadata labels
+LABEL maintainer="shmocker-team"
+LABEL version="${VERSION}"
+
+# Install basic utilities
+RUN apk add --no-cache curl ca-certificates
+
+# Create a non-root user
+RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
+
+# Set working directory
+WORKDIR /app
+
+# Create a simple script
+RUN echo '#!/bin/sh' > /app/run.sh && echo 'echo "Hello from shmocker! Version: $VERSION"' >> /app/run.sh && chmod +x /app/run.sh
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 8080
+
+# Set environment variables
+ENV VERSION=${VERSION}
+ENV APP_ENV=production
+
+# Default command
+CMD ["/app/run.sh"]

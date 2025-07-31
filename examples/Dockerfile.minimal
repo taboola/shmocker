@@ -1,0 +1,17 @@
+# Minimal Dockerfile for testing shmocker
+FROM alpine:3.18
+
+# Install curl
+RUN apk add curl
+
+# Set working directory
+WORKDIR /app
+
+# Add a label
+LABEL version="1.0.0"
+
+# Set user
+USER nobody
+
+# Default command
+CMD ["echo", "Hello from shmocker!"]

@@ -157,8 +157,8 @@ func TestBuilder_Build(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "nil build request",
-			request: nil,
+			name:        "nil build request",
+			request:     nil,
 			expectError: true,
 		},
 		{

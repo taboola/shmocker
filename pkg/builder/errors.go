@@ -3,8 +3,6 @@ package builder
 import (
 	"fmt"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 // BuildError represents a build-specific error with user-friendly messaging
@@ -21,16 +19,16 @@ type BuildError struct {
 type BuildErrorType string
 
 const (
-	ErrorTypeContext         BuildErrorType = "context"
-	ErrorTypeDockerfile      BuildErrorType = "dockerfile"
-	ErrorTypeDependency      BuildErrorType = "dependency"
-	ErrorTypePermission      BuildErrorType = "permission"
-	ErrorTypeNetwork         BuildErrorType = "network"
-	ErrorTypeCache           BuildErrorType = "cache"
-	ErrorTypeResource        BuildErrorType = "resource"
-	ErrorTypeExecution       BuildErrorType = "execution"
-	ErrorTypeConfiguration   BuildErrorType = "configuration"
-	ErrorTypeUnknown         BuildErrorType = "unknown"
+	ErrorTypeContext       BuildErrorType = "context"
+	ErrorTypeDockerfile    BuildErrorType = "dockerfile"
+	ErrorTypeDependency    BuildErrorType = "dependency"
+	ErrorTypePermission    BuildErrorType = "permission"
+	ErrorTypeNetwork       BuildErrorType = "network"
+	ErrorTypeCache         BuildErrorType = "cache"
+	ErrorTypeResource      BuildErrorType = "resource"
+	ErrorTypeExecution     BuildErrorType = "execution"
+	ErrorTypeConfiguration BuildErrorType = "configuration"
+	ErrorTypeUnknown       BuildErrorType = "unknown"
 )
 
 // Error implements the error interface
@@ -74,23 +72,23 @@ func (be *BuildError) WithContext(key string, value interface{}) *BuildError {
 // FormatUserError formats the error for user display
 func (be *BuildError) FormatUserError() string {
 	var sb strings.Builder
-	
+
 	// Error header
 	sb.WriteString(fmt.Sprintf("Build failed: %s\n", be.Message))
-	
+
 	// Step information
 	if be.Step != "" {
 		sb.WriteString(fmt.Sprintf("Step: %s\n", be.Step))
 	}
-	
+
 	// Error type
 	sb.WriteString(fmt.Sprintf("Category: %s\n", be.Type))
-	
+
 	// Underlying cause
 	if be.Cause != nil {
 		sb.WriteString(fmt.Sprintf("Cause: %s\n", be.Cause.Error()))
 	}
-	
+
 	// Context information
 	if len(be.Context) > 0 {
 		sb.WriteString("Context:\n")
@@ -98,7 +96,7 @@ func (be *BuildError) FormatUserError() string {
 			sb.WriteString(fmt.Sprintf("  %s: %v\n", k, v))
 		}
 	}
-	
+
 	// Suggestions
 	if len(be.Suggestions) > 0 {
 		sb.WriteString("Suggestions:\n")
@@ -106,7 +104,7 @@ func (be *BuildError) FormatUserError() string {
 			sb.WriteString(fmt.Sprintf("  • %s\n", suggestion))
 		}
 	}
-	
+
 	return sb.String()
 }
 
@@ -123,15 +121,15 @@ func (ec *ErrorClassifier) ClassifyError(err error) *BuildError {
 	if err == nil {
 		return nil
 	}
-	
+
 	// Check if it's already a BuildError
 	if buildErr, ok := err.(*BuildError); ok {
 		return buildErr
 	}
-	
+
 	// Analyze error message and classify
 	errMsg := strings.ToLower(err.Error())
-	
+
 	switch {
 	case ec.isContextError(errMsg):
 		return ec.classifyContextError(err, errMsg)
@@ -168,14 +166,14 @@ func (ec *ErrorClassifier) isContextError(errMsg string) bool {
 		"http",
 		"context not found",
 	}
-	
+
 	return ec.containsAny(errMsg, contextKeywords)
 }
 
 // classifyContextError classifies context-related errors
 func (ec *ErrorClassifier) classifyContextError(err error, errMsg string) *BuildError {
 	buildErr := NewBuildError(ErrorTypeContext, "Build context error", err)
-	
+
 	switch {
 	case strings.Contains(errMsg, "directory does not exist"):
 		buildErr.Message = "Build context directory not found"
@@ -210,7 +208,7 @@ func (ec *ErrorClassifier) classifyContextError(err error, errMsg string) *Build
 			"Verify file permissions",
 		)
 	}
-	
+
 	return buildErr
 }
 
@@ -224,14 +222,14 @@ func (ec *ErrorClassifier) isDockerfileError(errMsg string) bool {
 		"invalid format",
 		"ast",
 	}
-	
+
 	return ec.containsAny(errMsg, dockerfileKeywords)
 }
 
 // classifyDockerfileError classifies Dockerfile-related errors
 func (ec *ErrorClassifier) classifyDockerfileError(err error, errMsg string) *BuildError {
 	buildErr := NewBuildError(ErrorTypeDockerfile, "Dockerfile error", err)
-	
+
 	switch {
 	case strings.Contains(errMsg, "parse") || strings.Contains(errMsg, "syntax"):
 		buildErr.Message = "Dockerfile syntax error"
@@ -260,7 +258,7 @@ func (ec *ErrorClassifier) classifyDockerfileError(err error, errMsg string) *Bu
 			"Check instruction format and arguments",
 		)
 	}
-	
+
 	return buildErr
 }
 
@@ -278,14 +276,14 @@ func (ec *ErrorClassifier) isDependencyError(errMsg string) bool {
 		"pip install",
 		"gem install",
 	}
-	
+
 	return ec.containsAny(errMsg, dependencyKeywords)
 }
 
 // classifyDependencyError classifies dependency-related errors
 func (ec *ErrorClassifier) classifyDependencyError(err error, errMsg string) *BuildError {
 	buildErr := NewBuildError(ErrorTypeDependency, "Dependency error", err)
-	
+
 	switch {
 	case strings.Contains(errMsg, "package not found"):
 		buildErr.Message = "Package not found"
@@ -315,7 +313,7 @@ func (ec *ErrorClassifier) classifyDependencyError(err error, errMsg string) *Bu
 			"Verify repository availability",
 		)
 	}
-	
+
 	return buildErr
 }
 
@@ -328,14 +326,14 @@ func (ec *ErrorClassifier) isPermissionError(errMsg string) bool {
 		"insufficient privileges",
 		"rootless",
 	}
-	
+
 	return ec.containsAny(errMsg, permissionKeywords)
 }
 
 // classifyPermissionError classifies permission-related errors
 func (ec *ErrorClassifier) classifyPermissionError(err error, errMsg string) *BuildError {
 	buildErr := NewBuildError(ErrorTypePermission, "Permission error", err)
-	
+
 	buildErr.Message = "Insufficient permissions"
 	buildErr.WithSuggestions(
 		"Check file and directory permissions",
@@ -343,7 +341,7 @@ func (ec *ErrorClassifier) classifyPermissionError(err error, errMsg string) *Bu
 		"Consider running in rootless mode if appropriate",
 		"Verify ownership of build context files",
 	)
-	
+
 	return buildErr
 }
 
@@ -359,14 +357,14 @@ func (ec *ErrorClassifier) isNetworkError(errMsg string) bool {
 		"unreachable",
 		"proxy",
 	}
-	
+
 	return ec.containsAny(errMsg, networkKeywords)
 }
 
 // classifyNetworkError classifies network-related errors
 func (ec *ErrorClassifier) classifyNetworkError(err error, errMsg string) *BuildError {
 	buildErr := NewBuildError(ErrorTypeNetwork, "Network error", err)
-	
+
 	switch {
 	case strings.Contains(errMsg, "timeout"):
 		buildErr.Message = "Network timeout"
@@ -397,7 +395,7 @@ func (ec *ErrorClassifier) classifyNetworkError(err error, errMsg string) *Build
 			"Check firewall and proxy settings",
 		)
 	}
-	
+
 	return buildErr
 }
 
@@ -409,14 +407,14 @@ func (ec *ErrorClassifier) isCacheError(errMsg string) bool {
 		"export cache",
 		"cache mount",
 	}
-	
+
 	return ec.containsAny(errMsg, cacheKeywords)
 }
 
 // classifyCacheError classifies cache-related errors
 func (ec *ErrorClassifier) classifyCacheError(err error, errMsg string) *BuildError {
 	buildErr := NewBuildError(ErrorTypeCache, "Cache error", err)
-	
+
 	buildErr.Message = "Build cache operation failed"
 	buildErr.WithSuggestions(
 		"Check cache configuration",
@@ -424,7 +422,7 @@ func (ec *ErrorClassifier) classifyCacheError(err error, errMsg string) *BuildEr
 		"Try building without cache if possible",
 		"Clear cache and retry",
 	)
-	
+
 	return buildErr
 }
 
@@ -437,14 +435,14 @@ func (ec *ErrorClassifier) isResourceError(errMsg string) bool {
 		"too many open files",
 		"disk full",
 	}
-	
+
 	return ec.containsAny(errMsg, resourceKeywords)
 }
 
 // classifyResourceError classifies resource-related errors
 func (ec *ErrorClassifier) classifyResourceError(err error, errMsg string) *BuildError {
 	buildErr := NewBuildError(ErrorTypeResource, "Resource error", err)
-	
+
 	switch {
 	case strings.Contains(errMsg, "no space left") || strings.Contains(errMsg, "disk full"):
 		buildErr.Message = "Insufficient disk space"
@@ -474,7 +472,7 @@ func (ec *ErrorClassifier) classifyResourceError(err error, errMsg string) *Buil
 			"Try building at a different time",
 		)
 	}
-	
+
 	return buildErr
 }
 
@@ -486,14 +484,14 @@ func (ec *ErrorClassifier) isExecutionError(errMsg string) bool {
 		"execution failed",
 		"process exited",
 	}
-	
+
 	return ec.containsAny(errMsg, executionKeywords)
 }
 
 // classifyExecutionError classifies execution-related errors
 func (ec *ErrorClassifier) classifyExecutionError(err error, errMsg string) *BuildError {
 	buildErr := NewBuildError(ErrorTypeExecution, "Execution error", err)
-	
+
 	buildErr.Message = "Command execution failed"
 	buildErr.WithSuggestions(
 		"Check the command syntax and arguments",
@@ -501,7 +499,7 @@ func (ec *ErrorClassifier) classifyExecutionError(err error, errMsg string) *Bui
 		"Review command output for specific errors",
 		"Test the command manually in the container",
 	)
-	
+
 	return buildErr
 }
 
@@ -515,14 +513,14 @@ func (ec *ErrorClassifier) isConfigurationError(errMsg string) bool {
 		"buildkit",
 		"worker",
 	}
-	
+
 	return ec.containsAny(errMsg, configKeywords)
 }
 
 // classifyConfigurationError classifies configuration-related errors
 func (ec *ErrorClassifier) classifyConfigurationError(err error, errMsg string) *BuildError {
 	buildErr := NewBuildError(ErrorTypeConfiguration, "Configuration error", err)
-	
+
 	buildErr.Message = "Build configuration error"
 	buildErr.WithSuggestions(
 		"Check build configuration parameters",
@@ -530,21 +528,21 @@ func (ec *ErrorClassifier) classifyConfigurationError(err error, errMsg string) 
 		"Review build options and flags",
 		"Check for unsupported features",
 	)
-	
+
 	return buildErr
 }
 
 // classifyUnknownError classifies unknown errors
 func (ec *ErrorClassifier) classifyUnknownError(err error, errMsg string) *BuildError {
 	buildErr := NewBuildError(ErrorTypeUnknown, "Unknown build error", err)
-	
+
 	buildErr.WithSuggestions(
 		"Review the error message for clues",
 		"Check BuildKit and system logs",
 		"Try a simpler build to isolate the issue",
 		"Report this issue if it persists",
 	)
-	
+
 	return buildErr
 }
 
@@ -563,11 +561,11 @@ func WrapError(err error, step string) error {
 	if err == nil {
 		return nil
 	}
-	
+
 	classifier := NewErrorClassifier()
 	buildErr := classifier.ClassifyError(err)
 	buildErr.WithStep(step)
-	
+
 	return buildErr
 }
 

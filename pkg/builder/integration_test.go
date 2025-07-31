@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package builder
@@ -417,7 +418,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
+		name              string
 		dockerfileContent string
 		expectedErrorType BuildErrorType
 	}{
@@ -553,7 +554,7 @@ RUN echo 'benchmark test'
 	for i := 0; i < b.N; i++ {
 		// Use different tags to avoid conflicts
 		request.Tags = []string{fmt.Sprintf("shmocker-bench:test-%d", i)}
-		
+
 		_, err := builder.Build(ctx, request)
 		if err != nil {
 			b.Fatalf("Build failed: %v", err)

@@ -3,7 +3,6 @@ package builder
 
 import (
 	"context"
-	"io"
 	"time"
 
 	"github.com/shmocker/shmocker/pkg/cache"
@@ -16,10 +15,10 @@ import (
 type Builder interface {
 	// Build executes a complete image build workflow
 	Build(ctx context.Context, req *BuildRequest) (*BuildResult, error)
-	
+
 	// BuildWithProgress executes a build with progress reporting
 	BuildWithProgress(ctx context.Context, req *BuildRequest, progress chan<- *ProgressEvent) (*BuildResult, error)
-	
+
 	// Close cleans up resources used by the builder
 	Close() error
 }
@@ -29,16 +28,16 @@ type Builder interface {
 type BuildKitController interface {
 	// Solve executes a BuildKit solve operation with the provided definition
 	Solve(ctx context.Context, def *SolveDefinition) (*SolveResult, error)
-	
+
 	// ImportCache imports build cache from external sources
 	ImportCache(ctx context.Context, imports []*CacheImport) error
-	
+
 	// ExportCache exports build cache to external destinations
 	ExportCache(ctx context.Context, exports []*CacheExport) error
-	
+
 	// GetSession returns the current BuildKit session for advanced operations
 	GetSession(ctx context.Context) (Session, error)
-	
+
 	// Close shuts down the BuildKit controller
 	Close() error
 }
@@ -47,13 +46,13 @@ type BuildKitController interface {
 type Worker interface {
 	// GetWorkerController returns the underlying worker controller
 	GetWorkerController() WorkerController
-	
+
 	// Platforms returns the platforms supported by this worker
 	Platforms() []Platform
-	
+
 	// Executor returns the executor for running build steps
 	Executor() Executor
-	
+
 	// CacheManager returns the cache manager for this worker
 	CacheManager() cache.Manager
 }
@@ -62,7 +61,7 @@ type Worker interface {
 type WorkerController interface {
 	// GetDefault returns the default worker
 	GetDefault() (Worker, error)
-	
+
 	// List returns all available workers
 	List() ([]Worker, error)
 }
@@ -71,10 +70,10 @@ type WorkerController interface {
 type Executor interface {
 	// Run executes a single build step
 	Run(ctx context.Context, step *ExecutionStep) (*ExecutionResult, error)
-	
+
 	// Prepare prepares the execution environment
 	Prepare(ctx context.Context, spec *ExecutionSpec) error
-	
+
 	// Cleanup cleans up after execution
 	Cleanup(ctx context.Context) error
 }
@@ -98,10 +97,10 @@ func (p Platform) String() string {
 type Session interface {
 	// ID returns the session identifier
 	ID() string
-	
+
 	// Run starts the session
 	Run(ctx context.Context) error
-	
+
 	// Close ends the session
 	Close() error
 }
@@ -110,10 +109,10 @@ type Session interface {
 type ProgressReporter interface {
 	// ReportProgress sends a progress update
 	ReportProgress(event *ProgressEvent)
-	
+
 	// SetTotal sets the total number of steps
 	SetTotal(total int)
-	
+
 	// Close finalizes progress reporting
 	Close()
 }
@@ -150,81 +149,81 @@ type ProgressDetail struct {
 // BuildRequest represents a complete build request with all necessary parameters.
 type BuildRequest struct {
 	// Context configuration
-	Context    BuildContext        `json:"context"`
-	Dockerfile *dockerfile.AST     `json:"dockerfile"`
-	
+	Context    BuildContext    `json:"context"`
+	Dockerfile *dockerfile.AST `json:"dockerfile"`
+
 	// Build parameters
-	Tags          []string            `json:"tags,omitempty"`
-	Target        string              `json:"target,omitempty"`
-	Platforms     []Platform          `json:"platforms,omitempty"`
-	BuildArgs     map[string]string   `json:"build_args,omitempty"`
-	Labels        map[string]string   `json:"labels,omitempty"`
-	
+	Tags      []string          `json:"tags,omitempty"`
+	Target    string            `json:"target,omitempty"`
+	Platforms []Platform        `json:"platforms,omitempty"`
+	BuildArgs map[string]string `json:"build_args,omitempty"`
+	Labels    map[string]string `json:"labels,omitempty"`
+
 	// Cache configuration
-	CacheFrom     []*CacheImport      `json:"cache_from,omitempty"`
-	CacheTo       []*CacheExport      `json:"cache_to,omitempty"`
-	NoCache       bool                `json:"no_cache,omitempty"`
-	
+	CacheFrom []*CacheImport `json:"cache_from,omitempty"`
+	CacheTo   []*CacheExport `json:"cache_to,omitempty"`
+	NoCache   bool           `json:"no_cache,omitempty"`
+
 	// Output configuration
-	Output        *OutputConfig       `json:"output,omitempty"`
-	
+	Output *OutputConfig `json:"output,omitempty"`
+
 	// Security and compliance
-	GenerateSBOM  bool                `json:"generate_sbom,omitempty"`
-	SignImage     bool                `json:"sign_image,omitempty"`
-	
+	GenerateSBOM bool `json:"generate_sbom,omitempty"`
+	SignImage    bool `json:"sign_image,omitempty"`
+
 	// Advanced options
-	Pull          bool                `json:"pull,omitempty"`
-	Secrets       []*Secret           `json:"secrets,omitempty"`
-	SSH           []*SSHConfig        `json:"ssh,omitempty"`
-	NetworkMode   string              `json:"network_mode,omitempty"`
+	Pull        bool         `json:"pull,omitempty"`
+	Secrets     []*Secret    `json:"secrets,omitempty"`
+	SSH         []*SSHConfig `json:"ssh,omitempty"`
+	NetworkMode string       `json:"network_mode,omitempty"`
 }
 
 // BuildResult contains the results of a successful build operation.
 type BuildResult struct {
 	// Image information
-	ImageID       string              `json:"image_id"`
-	ImageDigest   string              `json:"image_digest"`
-	Manifests     []*ImageManifest    `json:"manifests"`
-	
+	ImageID     string           `json:"image_id"`
+	ImageDigest string           `json:"image_digest"`
+	Manifests   []*ImageManifest `json:"manifests"`
+
 	// Build metadata
-	BuildTime     time.Duration       `json:"build_time"`
-	CacheHits     int                 `json:"cache_hits"`
-	CacheMisses   int                 `json:"cache_misses"`
-	
+	BuildTime   time.Duration `json:"build_time"`
+	CacheHits   int           `json:"cache_hits"`
+	CacheMisses int           `json:"cache_misses"`
+
 	// Security artifacts
-	SBOM          *SBOMData           `json:"sbom,omitempty"`
-	Signature     *SignatureData      `json:"signature,omitempty"`
-	
+	SBOM      *SBOMData      `json:"sbom,omitempty"`
+	Signature *SignatureData `json:"signature,omitempty"`
+
 	// Export results
-	ExportedCache []*CacheExport      `json:"exported_cache,omitempty"`
+	ExportedCache []*CacheExport `json:"exported_cache,omitempty"`
 }
 
 // BuildContext represents the build context for an image build.
 type BuildContext struct {
-	Type        ContextType         `json:"type"`
-	Source      string              `json:"source"`
-	Include     []string            `json:"include,omitempty"`
-	Exclude     []string            `json:"exclude,omitempty"`
-	DockerIgnore bool               `json:"docker_ignore,omitempty"`
+	Type         ContextType `json:"type"`
+	Source       string      `json:"source"`
+	Include      []string    `json:"include,omitempty"`
+	Exclude      []string    `json:"exclude,omitempty"`
+	DockerIgnore bool        `json:"docker_ignore,omitempty"`
 }
 
 // ContextType defines the type of build context.
 type ContextType string
 
 const (
-	ContextTypeLocal  ContextType = "local"
-	ContextTypeGit    ContextType = "git"
-	ContextTypeTar    ContextType = "tar"
-	ContextTypeStdin  ContextType = "stdin"
-	ContextTypeHTTP   ContextType = "http"
+	ContextTypeLocal ContextType = "local"
+	ContextTypeGit   ContextType = "git"
+	ContextTypeTar   ContextType = "tar"
+	ContextTypeStdin ContextType = "stdin"
+	ContextTypeHTTP  ContextType = "http"
 )
 
 // OutputConfig defines where and how to output the built image.
 type OutputConfig struct {
-	Type        OutputType          `json:"type"`
-	Destination string              `json:"destination,omitempty"`
-	Push        bool                `json:"push,omitempty"`
-	Registry    *registry.Config    `json:"registry,omitempty"`
+	Type        OutputType       `json:"type"`
+	Destination string           `json:"destination,omitempty"`
+	Push        bool             `json:"push,omitempty"`
+	Registry    *registry.Config `json:"registry,omitempty"`
 }
 
 // OutputType defines the output format for built images.
@@ -232,7 +231,7 @@ type OutputType string
 
 const (
 	OutputTypeRegistry OutputType = "registry"
-	OutputTypeLocal    OutputType = "local" 
+	OutputTypeLocal    OutputType = "local"
 	OutputTypeTar      OutputType = "tar"
 	OutputTypeOCI      OutputType = "oci"
 )
@@ -252,47 +251,47 @@ type SSHConfig struct {
 
 // SolveDefinition represents a BuildKit solve definition.
 type SolveDefinition struct {
-	Definition []byte              `json:"definition"`
-	Frontend   string              `json:"frontend"`
-	Metadata   map[string][]byte   `json:"metadata,omitempty"`
+	Definition []byte            `json:"definition"`
+	Frontend   string            `json:"frontend"`
+	Metadata   map[string][]byte `json:"metadata,omitempty"`
 }
 
 // SolveResult represents the result of a BuildKit solve operation.
 type SolveResult struct {
-	Ref       string              `json:"ref"`
-	Metadata  map[string][]byte   `json:"metadata,omitempty"`
+	Ref      string            `json:"ref"`
+	Metadata map[string][]byte `json:"metadata,omitempty"`
 }
 
 // ExecutionStep represents a single step in the build execution.
 type ExecutionStep struct {
-	ID          string              `json:"id"`
-	Command     []string            `json:"command"`
-	Env         []string            `json:"env,omitempty"`
-	WorkingDir  string              `json:"working_dir,omitempty"`
-	User        string              `json:"user,omitempty"`
-	Mounts      []*Mount            `json:"mounts,omitempty"`
+	ID         string   `json:"id"`
+	Command    []string `json:"command"`
+	Env        []string `json:"env,omitempty"`
+	WorkingDir string   `json:"working_dir,omitempty"`
+	User       string   `json:"user,omitempty"`
+	Mounts     []*Mount `json:"mounts,omitempty"`
 }
 
 // ExecutionResult represents the result of executing a build step.
 type ExecutionResult struct {
-	ExitCode    int                 `json:"exit_code"`
-	Stdout      []byte              `json:"stdout,omitempty"`
-	Stderr      []byte              `json:"stderr,omitempty"`
-	Duration    time.Duration       `json:"duration"`
+	ExitCode int           `json:"exit_code"`
+	Stdout   []byte        `json:"stdout,omitempty"`
+	Stderr   []byte        `json:"stderr,omitempty"`
+	Duration time.Duration `json:"duration"`
 }
 
 // ExecutionSpec defines the specification for build step execution.
 type ExecutionSpec struct {
-	Platform    Platform            `json:"platform"`
-	Constraints map[string]string   `json:"constraints,omitempty"`
+	Platform    Platform          `json:"platform"`
+	Constraints map[string]string `json:"constraints,omitempty"`
 }
 
 // Mount represents a mount point in build execution.
 type Mount struct {
-	Type        MountType           `json:"type"`
-	Source      string              `json:"source,omitempty"`
-	Target      string              `json:"target"`
-	Options     []string            `json:"options,omitempty"`
+	Type    MountType `json:"type"`
+	Source  string    `json:"source,omitempty"`
+	Target  string    `json:"target"`
+	Options []string  `json:"options,omitempty"`
 }
 
 // MountType defines the type of mount.
@@ -308,9 +307,9 @@ const (
 
 // CacheImport represents cache import configuration.
 type CacheImport struct {
-	Type    string            `json:"type"`
-	Ref     string            `json:"ref"`
-	Attrs   map[string]string `json:"attrs,omitempty"`
+	Type  string            `json:"type"`
+	Ref   string            `json:"ref"`
+	Attrs map[string]string `json:"attrs,omitempty"`
 }
 
 // CacheExport represents cache export configuration.
@@ -341,16 +340,16 @@ type Descriptor struct {
 
 // SBOMData represents Software Bill of Materials data.
 type SBOMData struct {
-	Format   string    `json:"format"`
-	Version  string    `json:"version"`
-	Data     []byte    `json:"data"`
-	Digest   string    `json:"digest"`
+	Format  string `json:"format"`
+	Version string `json:"version"`
+	Data    []byte `json:"data"`
+	Digest  string `json:"digest"`
 }
 
 // SignatureData represents image signature data.
 type SignatureData struct {
-	Algorithm string    `json:"algorithm"`
-	Signature []byte    `json:"signature"`
-	KeyID     string    `json:"key_id,omitempty"`
-	Digest    string    `json:"digest"`
+	Algorithm string `json:"algorithm"`
+	Signature []byte `json:"signature"`
+	KeyID     string `json:"key_id,omitempty"`
+	Digest    string `json:"digest"`
 }

@@ -1,0 +1,49 @@
+# Example .dockerignore file
+# This demonstrates how shmocker handles build context filtering
+
+# Version control
+.git
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Build artifacts
+*.tar
+*.tar.gz
+bin/
+build/
+dist/
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Dependencies
+node_modules/
+vendor/
+
+# IDE files
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Test files
+*_test.go
+test/
+tests/
+
+# Configuration that shouldn't be in image
+.env
+.env.local
+config.dev.json

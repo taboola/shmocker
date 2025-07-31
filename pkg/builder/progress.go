@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package builder
 
 import (
@@ -113,7 +116,7 @@ func (ph *ProgressHandler) processVertex(vertex *client.Vertex) {
 			status = StatusError
 			v.Error = vertex.Error
 		}
-		
+
 		ph.sendProgress(&ProgressEvent{
 			ID:        v.ID,
 			Name:      v.Name,
@@ -193,12 +196,12 @@ func (ph *ProgressHandler) sendProgress(event *ProgressEvent) {
 func (ph *ProgressHandler) GetVertexLogs(vertexID string) []*ProgressLog {
 	ph.mu.RLock()
 	defer ph.mu.RUnlock()
-	
+
 	logs, exists := ph.logs[vertexID]
 	if !exists {
 		return nil
 	}
-	
+
 	// Return a copy to avoid race conditions
 	result := make([]*ProgressLog, len(logs))
 	copy(result, logs)
@@ -209,7 +212,7 @@ func (ph *ProgressHandler) GetVertexLogs(vertexID string) []*ProgressLog {
 func (ph *ProgressHandler) GetCompletedVertexes() []*ProgressVertex {
 	ph.mu.RLock()
 	defer ph.mu.RUnlock()
-	
+
 	var completed []*ProgressVertex
 	for _, vertex := range ph.vertexes {
 		if vertex.Completed != nil {
@@ -223,7 +226,7 @@ func (ph *ProgressHandler) GetCompletedVertexes() []*ProgressVertex {
 func (ph *ProgressHandler) GetBuildStats() BuildStats {
 	ph.mu.RLock()
 	defer ph.mu.RUnlock()
-	
+
 	stats := BuildStats{}
 	for _, vertex := range ph.vertexes {
 		stats.TotalSteps++
