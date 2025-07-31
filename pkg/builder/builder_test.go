@@ -98,15 +98,27 @@ func createTestDockerfileAST() *dockerfile.AST {
 	// This would normally be created by parsing a Dockerfile
 	// For testing, we create a minimal AST structure
 	return &dockerfile.AST{
-		Instructions: []dockerfile.Instruction{
+		Stages: []*dockerfile.Stage{
 			{
-				Cmd:  "FROM",
-				Args: []string{"alpine:latest"},
+				Name:  "",
+				Index: 0,
+				From: &dockerfile.FromInstruction{
+					Image:    "alpine",
+					Tag:      "latest",
+					Location: &dockerfile.SourceLocation{Line: 1, Column: 1},
+				},
+				Instructions: []dockerfile.Instruction{
+					&dockerfile.RunInstruction{
+						Commands: []string{"echo 'Hello, World!'"},
+						Shell:    true,
+						Location: &dockerfile.SourceLocation{Line: 2, Column: 1},
+					},
+				},
+				Location: &dockerfile.SourceLocation{Line: 1, Column: 1},
 			},
-			{
-				Cmd:  "RUN",
-				Args: []string{"echo 'Hello, World!'"},
-			},
+		},
+		Metadata: &dockerfile.ParseMetadata{
+			ParserVersion: "test",
 		},
 	}
 }

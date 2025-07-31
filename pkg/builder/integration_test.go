@@ -43,19 +43,27 @@ CMD cat /test.txt
 	// Parse the Dockerfile to AST
 	// Note: This would use the actual dockerfile parser
 	ast := &dockerfile.AST{
-		Instructions: []dockerfile.Instruction{
+		Stages: []*dockerfile.Stage{
 			{
-				Cmd:  "FROM",
-				Args: []string{"alpine:latest"},
+				Name:  "",
+				Index: 0,
+				From: &dockerfile.FromInstruction{
+					Image:    "alpine",
+					Tag:      "latest",
+					Location: &dockerfile.SourceLocation{Line: 1, Column: 1},
+				},
+				Instructions: []dockerfile.Instruction{
+					&dockerfile.RunInstruction{
+						Commands: []string{"echo 'Hello from shmocker integration test' > /test.txt"},
+						Shell:    true,
+						Location: &dockerfile.SourceLocation{Line: 2, Column: 1},
+					},
+				},
+				Location: &dockerfile.SourceLocation{Line: 1, Column: 1},
 			},
-			{
-				Cmd:  "RUN",
-				Args: []string{"echo 'Hello from shmocker integration test' > /test.txt"},
-			},
-			{
-				Cmd:  "CMD",
-				Args: []string{"cat /test.txt"},
-			},
+		},
+		Metadata: &dockerfile.ParseMetadata{
+			ParserVersion: "test",
 		},
 	}
 
@@ -141,13 +149,42 @@ CMD echo 'Build complete'
 
 	// Parse Dockerfile
 	ast := &dockerfile.AST{
-		Instructions: []dockerfile.Instruction{
-			{Cmd: "FROM", Args: []string{"alpine:latest"}},
-			{Cmd: "RUN", Args: []string{"apk add --no-cache curl"}},
-			{Cmd: "RUN", Args: []string{"echo 'Step 1 complete' > /step1.txt"}},
-			{Cmd: "RUN", Args: []string{"echo 'Step 2 complete' > /step2.txt"}},
-			{Cmd: "RUN", Args: []string{"echo 'Step 3 complete' > /step3.txt"}},
-			{Cmd: "CMD", Args: []string{"echo 'Build complete'"}},
+		Stages: []*dockerfile.Stage{
+			{
+				Name:  "",
+				Index: 0,
+				From: &dockerfile.FromInstruction{
+					Image:    "alpine",
+					Tag:      "latest",
+					Location: &dockerfile.SourceLocation{Line: 1, Column: 1},
+				},
+				Instructions: []dockerfile.Instruction{
+					&dockerfile.RunInstruction{
+						Commands: []string{"apk add --no-cache curl"},
+						Shell:    true,
+						Location: &dockerfile.SourceLocation{Line: 2, Column: 1},
+					},
+					&dockerfile.RunInstruction{
+						Commands: []string{"echo 'Step 1 complete' > /step1.txt"},
+						Shell:    true,
+						Location: &dockerfile.SourceLocation{Line: 3, Column: 1},
+					},
+					&dockerfile.RunInstruction{
+						Commands: []string{"echo 'Step 2 complete' > /step2.txt"},
+						Shell:    true,
+						Location: &dockerfile.SourceLocation{Line: 4, Column: 1},
+					},
+					&dockerfile.RunInstruction{
+						Commands: []string{"echo 'Step 3 complete' > /step3.txt"},
+						Shell:    true,
+						Location: &dockerfile.SourceLocation{Line: 5, Column: 1},
+					},
+				},
+				Location: &dockerfile.SourceLocation{Line: 1, Column: 1},
+			},
+		},
+		Metadata: &dockerfile.ParseMetadata{
+			ParserVersion: "test",
 		},
 	}
 
@@ -257,10 +294,32 @@ RUN echo 'Cached step' > /cached.txt
 	}
 
 	ast := &dockerfile.AST{
-		Instructions: []dockerfile.Instruction{
-			{Cmd: "FROM", Args: []string{"alpine:latest"}},
-			{Cmd: "RUN", Args: []string{"apk add --no-cache curl wget"}},
-			{Cmd: "RUN", Args: []string{"echo 'Cached step' > /cached.txt"}},
+		Stages: []*dockerfile.Stage{
+			{
+				Name:  "",
+				Index: 0,
+				From: &dockerfile.FromInstruction{
+					Image:    "alpine",
+					Tag:      "latest",
+					Location: &dockerfile.SourceLocation{Line: 1, Column: 1},
+				},
+				Instructions: []dockerfile.Instruction{
+					&dockerfile.RunInstruction{
+						Commands: []string{"apk add --no-cache curl wget"},
+						Shell:    true,
+						Location: &dockerfile.SourceLocation{Line: 2, Column: 1},
+					},
+					&dockerfile.RunInstruction{
+						Commands: []string{"echo 'Cached step' > /cached.txt"},
+						Shell:    true,
+						Location: &dockerfile.SourceLocation{Line: 3, Column: 1},
+					},
+				},
+				Location: &dockerfile.SourceLocation{Line: 1, Column: 1},
+			},
+		},
+		Metadata: &dockerfile.ParseMetadata{
+			ParserVersion: "test",
 		},
 	}
 
@@ -361,10 +420,27 @@ CMD cat /arch.txt
 	}
 
 	ast := &dockerfile.AST{
-		Instructions: []dockerfile.Instruction{
-			{Cmd: "FROM", Args: []string{"alpine:latest"}},
-			{Cmd: "RUN", Args: []string{"uname -m > /arch.txt"}},
-			{Cmd: "CMD", Args: []string{"cat /arch.txt"}},
+		Stages: []*dockerfile.Stage{
+			{
+				Name:  "",
+				Index: 0,
+				From: &dockerfile.FromInstruction{
+					Image:    "alpine",
+					Tag:      "latest",
+					Location: &dockerfile.SourceLocation{Line: 1, Column: 1},
+				},
+				Instructions: []dockerfile.Instruction{
+					&dockerfile.RunInstruction{
+						Commands: []string{"uname -m > /arch.txt"},
+						Shell:    true,
+						Location: &dockerfile.SourceLocation{Line: 2, Column: 1},
+					},
+				},
+				Location: &dockerfile.SourceLocation{Line: 1, Column: 1},
+			},
+		},
+		Metadata: &dockerfile.ParseMetadata{
+			ParserVersion: "test",
 		},
 	}
 
@@ -455,8 +531,21 @@ RUN apk add --no-cache nonexistent-package-12345
 
 			// Create a simple AST (in real scenario, this would fail during parsing)
 			ast := &dockerfile.AST{
-				Instructions: []dockerfile.Instruction{
-					{Cmd: "FROM", Args: []string{"alpine:latest"}},
+				Stages: []*dockerfile.Stage{
+					{
+						Name:  "",
+						Index: 0,
+						From: &dockerfile.FromInstruction{
+							Image:    "alpine",
+							Tag:      "latest",
+							Location: &dockerfile.SourceLocation{Line: 1, Column: 1},
+						},
+						Instructions: []dockerfile.Instruction{},
+						Location: &dockerfile.SourceLocation{Line: 1, Column: 1},
+					},
+				},
+				Metadata: &dockerfile.ParseMetadata{
+					ParserVersion: "test",
 				},
 			}
 
@@ -525,9 +614,27 @@ RUN echo 'benchmark test'
 	}
 
 	ast := &dockerfile.AST{
-		Instructions: []dockerfile.Instruction{
-			{Cmd: "FROM", Args: []string{"alpine:latest"}},
-			{Cmd: "RUN", Args: []string{"echo 'benchmark test'"}},
+		Stages: []*dockerfile.Stage{
+			{
+				Name:  "",
+				Index: 0,
+				From: &dockerfile.FromInstruction{
+					Image:    "alpine",
+					Tag:      "latest",
+					Location: &dockerfile.SourceLocation{Line: 1, Column: 1},
+				},
+				Instructions: []dockerfile.Instruction{
+					&dockerfile.RunInstruction{
+						Commands: []string{"echo 'benchmark test'"},
+						Shell:    true,
+						Location: &dockerfile.SourceLocation{Line: 2, Column: 1},
+					},
+				},
+				Location: &dockerfile.SourceLocation{Line: 1, Column: 1},
+			},
+		},
+		Metadata: &dockerfile.ParseMetadata{
+			ParserVersion: "test",
 		},
 	}
 
