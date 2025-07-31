@@ -78,8 +78,13 @@ check_requirements() {
     fi
     
     # Check for virtualization support
-    if ! sysctl -n machdep.cpu.features | grep -q VMX; then
-        log_error "Hardware virtualization (VMX) not supported"
+    # Apple Silicon Macs use Hypervisor.framework, not VMX
+    if [[ $(uname -m) == "arm64" ]]; then
+        # Apple Silicon - virtualization is always available
+        log_info "Apple Silicon detected - virtualization supported via Hypervisor.framework"
+    elif ! sysctl -n machdep.cpu.features 2>/dev/null | grep -q VMX; then
+        # Intel Mac without VMX
+        log_error "Hardware virtualization (VMX) not supported on Intel Mac"
         exit 1
     fi
 }
