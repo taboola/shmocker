@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -284,11 +285,22 @@ func parseBuildFlags(cmd *cobra.Command, buildPath string, cfg *config.Config) (
 
 // executeBuild executes the actual build process
 func executeBuild(ctx context.Context, req *builder.BuildRequest, cmd *cobra.Command) error {
+	// Load configuration for Lima detection on macOS
+	cfg, err := loadConfiguration()
+	if err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
+	}
+
+	// Check Lima availability on macOS
+	if err := checkLimaAvailability(); err != nil {
+		return err
+	}
+
 	// Create builder
 	builderOpts := &builder.BuilderOptions{
-		Root:     filepath.Join(os.TempDir(), "shmocker"),
-		DataRoot: filepath.Join(os.TempDir(), "shmocker-data"),
-		Debug:    verbose,
+		Root:     cfg.GetBuildKitRoot(),
+		DataRoot: cfg.GetBuildKitDataRoot(),
+		Debug:    verbose || cfg.Debug,
 	}
 
 	b, err := builder.New(ctx, builderOpts)
@@ -572,6 +584,44 @@ func pushImageToRegistry(ctx context.Context, buildResult *builder.BuildResult, 
 	}
 
 	return nil
+}
+
+// checkLimaAvailability checks if Lima is available and properly set up on macOS
+func checkLimaAvailability() error {
+	// Only check Lima on macOS
+	if runtime.GOOS != "darwin" {
+		return nil
+	}
+
+	result, err := config.DetectLima()
+	if err != nil {
+		return fmt.Errorf("failed to detect Lima: %w", err)
+	}
+
+	if result.IsReady() {
+		if verbose {
+			fmt.Println("Lima BuildKit is ready")
+		}
+		return nil
+	}
+
+	// Lima is not ready, provide setup instructions
+	fmt.Fprintln(os.Stderr, "Lima BuildKit is not ready for use.")
+	if result.Error != "" {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", result.Error)
+	}
+
+	instructions := result.GetSetupInstructions()
+	if len(instructions) > 0 {
+		fmt.Fprintln(os.Stderr, "\nTo set up Lima BuildKit:")
+		for _, instruction := range instructions {
+			fmt.Fprintf(os.Stderr, "  %s\n", instruction)
+		}
+	}
+
+	fmt.Fprintln(os.Stderr, "\nFor more information, see: https://github.com/lima-vm/lima")
+	
+	return fmt.Errorf("Lima BuildKit setup required")
 }
 
 func main() {

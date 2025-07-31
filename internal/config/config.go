@@ -32,6 +32,9 @@ type Config struct {
 	BuildKitRoot     string `mapstructure:"buildkit_root"`
 	BuildKitDataRoot string `mapstructure:"buildkit_data_root"`
 	Debug            bool   `mapstructure:"debug"`
+	
+	// Lima settings (macOS only)
+	Lima *LimaConfig `mapstructure:"lima"`
 }
 
 // RegistryConfig contains registry-specific configuration.
@@ -59,6 +62,15 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("buildkit_data_root", filepath.Join(homeDir(), ".shmocker", "buildkit", "data"))
 	v.SetDefault("debug", false)
 	v.SetDefault("default_registry", "docker.io")
+	
+	// Set Lima defaults
+	v.SetDefault("lima", map[string]interface{}{
+		"vm_name":           "shmocker-buildkit",
+		"auto_start":        true,
+		"buildkit_port":     1234,
+		"buildkit_address": "tcp://127.0.0.1:1234",
+		"setup_script_path": "scripts/setup-macos.sh",
+	})
 	
 	// Configure viper for environment variables
 	v.SetEnvPrefix("SHMOCKER")
@@ -93,6 +105,11 @@ func Load(configPath string) (*Config, error) {
 	var config Config
 	if err := v.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+	
+	// Set Lima defaults if not configured
+	if config.Lima == nil {
+		config.Lima = DefaultLimaConfig()
 	}
 	
 	// Apply environment variable overrides for registry authentication
