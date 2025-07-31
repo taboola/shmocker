@@ -1,48 +1,61 @@
-# Binary
-shmocker
-shmocker-*
-
-# Go build artifacts
+# Binaries for programs and plugins
 *.exe
+*.exe~
 *.dll
 *.so
 *.dylib
-*.test
-*.out
+bin/
+dist/
 
-# Go workspace
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+coverage.html
+coverage.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
 go.work
 
-# Dependency directories
-vendor/
-
-# IDE specific files
-.idea/
+# IDE files
 .vscode/
+.idea/
 *.swp
 *.swo
-*~
 
-# OS specific files
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
-
-# Test coverage
-*.cover
-*.coverage
-coverage.txt
-coverage.html
-
-# Build directories
-dist/
-build/
-_output/
-
-# Cache directories
-.cache/
-.buildkit/
 
 # Temporary files
 *.tmp
-*.bak
+*.temp
+
+# Log files
 *.log
+
+# Config files (sensitive)
+.env
+.env.local
+.env.production
+config.yaml
+config.yml
+*.pem
+*.key
+
+# Build cache
+.cache/
+tmp/
+
+# Local development
+/local/
+/temp/
