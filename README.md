@@ -1,146 +1,169 @@
-# Shmocker
+# Shmocker: Because reinventing Docker is easier than reading the docs
 
-A rootless Docker image builder that provides a secure and efficient way to build container images without requiring root privileges.
+*A rootless Docker image builder crafted by autonomous AI agents who apparently thought the world needed yet another container build tool.*
 
-## Features
+## The Magnificent Problem We're Solving
 
-- Rootless container image building
-- OCI-compliant image output
-- SBOM generation
-- Image signing with Cosign
-- Multi-stage build support
-- Build caching
+Did you know that Docker already exists? Well, our AI overlords didn't get that memo. Instead, they've created Shmocker—a "rootless Docker image builder"—because clearly what the ecosystem was missing was another way to turn Dockerfiles into container images.
 
-## Project Structure
+But hey, at least it's rootless! Because nothing says "innovation" like taking something that works and making it more complicated.
+
+## Features (Or: Things Docker Already Does, But Now With More Steps)
+
+- **Rootless container image building** - Because sudo is apparently too mainstream
+- **OCI-compliant image output** - We promise our containers work just like real ones
+- **SBOM generation** - Now you can know exactly which vulnerabilities you're shipping
+- **Image signing with Cosign** - Cryptographically prove this madness came from us
+- **Multi-stage build support** - All the complexity of Docker, none of the ecosystem
+- **Build caching** - We cache things! Just like that other tool you already use
+
+## Project Structure (A Monument to Over-Engineering)
 
 ```
 shmocker/
-├── cmd/shmocker/           # Main CLI entry point
-├── pkg/                    # Public packages
-│   ├── builder/           # Core build logic
-│   ├── dockerfile/        # Dockerfile parser
-│   ├── registry/          # OCI registry client
-│   ├── sbom/             # SBOM generation
-│   └── signing/          # Cosign integration
-├── internal/              # Private packages
-│   ├── config/           # Configuration management
-│   └── cache/            # Build cache
-├── .github/workflows/     # GitHub Actions CI/CD
-├── Makefile              # Build automation
-├── Dockerfile            # Container image definition
-└── go.mod                # Go module definition
+├── cmd/shmocker/           # The main event (all 3 users will love it)
+├── pkg/                    # Public packages (as if anyone will import these)
+│   ├── builder/           # Core build logic (reinventing the wheel)
+│   ├── dockerfile/        # Dockerfile parser (because Docker's wasn't good enough)
+│   ├── registry/          # OCI registry client (Docker Hub compatibility sold separately)
+│   ├── sbom/             # SBOM generation (for when you need to document your mistakes)
+│   └── signing/          # Cosign integration (trust, but verify our poor life choices)
+├── internal/              # Private packages (where the real magic happens)
+│   ├── config/           # Configuration management (YAML files, the root of all evil)
+│   └── cache/            # Build cache (faster failures!)
+├── .github/workflows/     # CI/CD (robots building tools for robots)
+├── Makefile              # Build automation (make all your problems)
+├── Dockerfile            # Container image definition (the irony is not lost on us)
+└── go.mod                # Go module definition (dependency hell, here we come!)
 ```
 
-## Building
+## Building (Or: How to Compile Your Own Disappointment)
 
 ### Prerequisites
 
-- Go 1.21 or later
-- Make
+- Go 1.21 or later (because staying current is for try-hards)
+- Make (the tool that makes other tools)
+- An inexplicable desire to avoid using Docker to build Docker images
 
 ### Build Commands
 
 ```bash
-# Build for local development
+# Build for local development (embrace the chaos)
 make build-local
 
-# Build static binary for Linux
+# Build static binary for Linux (because portability is overrated)
 make build
 
-# Build release binaries for all platforms
+# Build release binaries for all platforms (reach tens of users worldwide)
 make release
 
-# Run tests
+# Run tests (watch our beautiful failures)
 make test
 
-# Run linters
+# Run linters (because even AI code needs judgment)
 make lint
 
-# Clean build artifacts
+# Clean build artifacts (start fresh, fail again)
 make clean
 ```
 
-### Docker Build
+### Docker Build (The Ultimate Irony)
 
 ```bash
 docker build -t shmocker .
 ```
 
-## Usage
+*Yes, we use Docker to build a Docker replacement. The autonomous agents found this hilarious.*
+
+## Usage (Or: How to Replace One Command With Another)
 
 ```bash
-# Build an image
+# Build an image (just like docker build, but different)
 shmocker build /path/to/build/context
 
-# Build with custom tag
+# Build with custom tag (because naming things is hard)
 shmocker build -t myimage:latest /path/to/build/context
 
-# Build with SBOM generation
+# Build with SBOM generation (document your supply chain sins)
 shmocker build --sbom -t myimage:latest /path/to/build/context
 
-# Build and sign the image
+# Build and sign the image (cryptographically guarantee it's our fault)
 shmocker build --sign -t myimage:latest /path/to/build/context
 ```
 
-## Configuration
+## Configuration (Because Simple Things Must Be Complex)
 
-Shmocker can be configured using a YAML configuration file located at `$HOME/.shmocker.yaml`:
+Shmocker can be configured using a YAML configuration file at `$HOME/.shmocker.yaml`, because JSON was apparently too readable:
 
 ```yaml
-default_platform: "linux/amd64"
-cache_dir: "~/.shmocker/cache"
-signing_enabled: false
-sbom_enabled: false
+default_platform: "linux/amd64"  # We're very platform-agnostic (for exactly one platform)
+cache_dir: "~/.shmocker/cache"   # Where dreams go to be cached
+signing_enabled: false           # Trust is overrated anyway
+sbom_enabled: false             # Ignorance is bliss
 
 registries:
-  docker.io:
+  docker.io:                    # Yes, we still need Docker Hub
     url: "https://registry-1.docker.io"
-    username: "myuser"
-    password: "mypass"
+    username: "myuser"          # Please don't use this in production
+    password: "mypass"          # Seriously, don't
 ```
 
-Environment variables can also be used with the `SHMOCKER_` prefix:
+Environment variables also work, because consistency is for the weak:
 
 ```bash
-export SHMOCKER_SIGNING_ENABLED=true
-export SHMOCKER_SBOM_ENABLED=true
+export SHMOCKER_SIGNING_ENABLED=true   # Trust our digital signatures
+export SHMOCKER_SBOM_ENABLED=true     # Embrace the paper trail
 ```
 
-## Development
+## Development (A Journey Into Madness)
 
-The project uses a modular architecture with the following key packages:
+Our autonomous agents have architected a beautifully over-engineered system:
 
-- **`pkg/builder`**: Core image building functionality
-- **`pkg/dockerfile`**: Dockerfile parsing and validation
-- **`pkg/registry`**: OCI registry interaction
-- **`pkg/sbom`**: Software Bill of Materials generation
-- **`pkg/signing`**: Image signing with Cosign
-- **`internal/config`**: Configuration management
-- **`internal/cache`**: Build artifact caching
+- **`pkg/builder`**: Core image building functionality (NIH syndrome in action)
+- **`pkg/dockerfile`**: Dockerfile parsing and validation (because regex wasn't painful enough)
+- **`pkg/registry`**: OCI registry interaction (Docker Hub, but complicated)
+- **`pkg/sbom`**: Software Bill of Materials generation (itemizing our dependencies' dependencies)
+- **`pkg/signing`**: Image signing with Cosign (blockchain for containers, essentially)
+- **`internal/config`**: Configuration management (YAML parsing as a service)
+- **`internal/cache`**: Build artifact caching (premature optimization, perfectly executed)
 
-## CI/CD
+## CI/CD (Robots All the Way Down)
 
-The project includes a comprehensive GitHub Actions workflow that:
+Our GitHub Actions workflow is a masterpiece of automation:
 
-- Runs tests and linters
-- Performs security scanning
-- Builds static binaries
-- Creates releases with multi-platform binaries
-- Builds and publishes Docker images
+- Runs tests and linters (quality control for chaos)
+- Performs security scanning (finding vulnerabilities in our vulnerability-finding tool)
+- Builds static binaries (portability through stubbornness)
+- Creates releases (so the three users can stay updated)
+- Builds and publishes Docker images (see previous irony note)
 
-## Status
+## Status (Or: The Current State of Our Hubris)
 
-🚧 **This project is currently in initial development phase.**
+🚧 **This project is currently in the "what have we done" phase.**
 
-The basic project structure and CLI framework have been established, but core functionality is not yet implemented. This includes:
+Our autonomous agents have established a magnificent foundation, but they're still working on making it actually *do* anything:
 
-- [ ] Dockerfile parsing
-- [ ] Image building logic
-- [ ] Registry operations
-- [ ] SBOM generation
-- [ ] Image signing
-- [ ] Build caching
+- [ ] Dockerfile parsing (turning text into more text)
+- [ ] Image building logic (the hard part we conveniently ignored)
+- [ ] Registry operations (talking to Docker Hub, but different)
+- [ ] SBOM generation (cataloging our technical debt)
+- [ ] Image signing (digitally signing our mistakes)
+- [ ] Build caching (caching broken builds for efficiency)
+
+## FAQ (Frequently Avoided Questions)
+
+**Q: Why does this exist?**  
+A: Autonomous AI agents don't ask "why," they ask "why not?"
+
+**Q: Is this better than Docker?**  
+A: Define "better." It's certainly more complicated.
+
+**Q: Should I use this in production?**  
+A: Only if you enjoy explaining to your team why your build system was written by robots.
+
+**Q: Will this replace Docker?**  
+A: About as much as cryptocurrency replaced traditional currency.
 
 ## License
 
-TBD
+TBD (To Be Determined, much like our reasoning for building this)
