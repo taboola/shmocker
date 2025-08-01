@@ -8,12 +8,13 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Default values
+# Configuration
 NAMESPACE="${K8S_NAMESPACE:-eir}"
-IMAGE_NAME="shmocker-build-$$"  # Use PID to make unique
-TIMEOUT=300
+IMAGE_NAME="shmocker-build-$$"
+BUILD_TIMEOUT=${BUILD_TIMEOUT:-300}
+DOWNLOAD_TIMEOUT=${DOWNLOAD_TIMEOUT:-60}
 
-# Function to print colored output
+# Logging
 log() {
     local level=$1
     shift
@@ -25,42 +26,41 @@ log() {
     esac
 }
 
-# Function to cleanup resources
+# Cleanup
 cleanup() {
-    log INFO "Cleaning up Kubernetes resources..."
+    log INFO "Cleaning up..."
     kubectl delete job ${IMAGE_NAME} -n ${NAMESPACE} --ignore-not-found=true 2>/dev/null
     kubectl delete configmap ${IMAGE_NAME}-dockerfile -n ${NAMESPACE} --ignore-not-found=true 2>/dev/null
     kubectl delete configmap ${IMAGE_NAME}-context -n ${NAMESPACE} --ignore-not-found=true 2>/dev/null
-    pkill -f "kubectl port-forward.*${IMAGE_NAME}" 2>/dev/null || true
 }
 
 trap cleanup EXIT
 
-# Create build job
-create_build_job() {
+# Create build job with completion signaling
+create_job() {
     local dockerfile_path=$1
     local context_dir=$2
     local output_file=$3
     
-    log INFO "Creating Kubernetes resources..."
+    log INFO "Creating build job..."
     
-    # Create ConfigMap from Dockerfile
+    # Create Dockerfile ConfigMap
     kubectl create configmap ${IMAGE_NAME}-dockerfile \
         --from-file=Dockerfile=${dockerfile_path} \
         -n ${NAMESPACE} \
         --dry-run=client -o yaml | kubectl apply -f -
     
-    # Check for context files
-    local context_files=$(find ${context_dir} -type f ! -name "*.dockerfile" ! -name "Dockerfile" 2>/dev/null | head -5)
-    if [ -n "$context_files" ]; then
-        log INFO "Found context files: $(echo $context_files | tr '\n' ' ')"
+    # Create context ConfigMap if needed
+    local has_context=false
+    if [ -n "$(find ${context_dir} -type f ! -name "*.dockerfile" ! -name "Dockerfile" 2>/dev/null | head -1)" ]; then
+        has_context=true
         kubectl create configmap ${IMAGE_NAME}-context \
             --from-file=${context_dir} \
             -n ${NAMESPACE} \
             --dry-run=client -o yaml | kubectl apply -f -
     fi
     
-    # Create the job
+    # Job manifest with sidecar pattern
     cat <<EOF | kubectl apply -f -
 apiVersion: batch/v1
 kind: Job
@@ -68,8 +68,8 @@ metadata:
   name: ${IMAGE_NAME}
   namespace: ${NAMESPACE}
 spec:
-  ttlSecondsAfterFinished: 600
   backoffLimit: 0
+  ttlSecondsAfterFinished: 300
   template:
     spec:
       restartPolicy: Never
@@ -79,34 +79,30 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
         - |
-          echo "=== Preparing build context ==="
           cp /dockerfile/Dockerfile /workspace/
           if [ -d /context ]; then
-            echo "Copying context files..."
             cd /context
             for f in *; do
-              if [ -f "\$f" ] && [ "\$f" != "Dockerfile" ]; then
-                cp "\$f" /workspace/
-              fi
+              [ -f "\$f" ] && [ "\$f" != "Dockerfile" ] && cp "\$f" /workspace/
             done
           fi
-          echo "Workspace contents:"
           ls -la /workspace/
         resources:
-          limits:
-            cpu: "0.5"
-            memory: "256Mi"
           requests:
             cpu: "0.1"
             memory: "64Mi"
+          limits:
+            cpu: "0.5"
+            memory: "256Mi"
         volumeMounts:
         - name: dockerfile
           mountPath: /dockerfile
-        - name: workspace
-          mountPath: /workspace
         - name: context
           mountPath: /context
+        - name: workspace
+          mountPath: /workspace
       containers:
+      # Build container
       - name: build
         image: moby/buildkit:v0.17.0-rootless
         env:
@@ -115,31 +111,47 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
         - |
-          echo "=== Starting BuildKit build ==="
-          buildctl-daemonless.sh build \
+          echo "[BUILD] Starting BuildKit..."
+          
+          # Run the build
+          if buildctl-daemonless.sh build \
             --frontend dockerfile.v0 \
             --local context=/workspace \
             --local dockerfile=/workspace \
             --output type=oci,dest=/output/${output_file} \
-            --progress plain
-          
-          if [ -f /output/${output_file} ]; then
-            echo "=== Build successful ==="
-            ls -lh /output/
-            # Keep container running for download
-            echo "Keeping container alive for download..."
-            sleep 300
+            --progress plain; then
+            
+            echo "[BUILD] Success! Image size: \$(ls -lh /output/${output_file} | awk '{print \$5}')"
+            touch /output/build.success
+            
+            # Signal completion to download container
+            echo "ready" > /output/download.signal
           else
-            echo "=== Build FAILED ==="
-            exit 1
+            echo "[BUILD] Failed!"
+            touch /output/build.failed
+            echo "failed" > /output/download.signal
           fi
+          
+          # Wait for download to complete or timeout
+          echo "[BUILD] Waiting for download completion..."
+          timeout=60
+          while [ \$timeout -gt 0 ]; do
+            if [ -f /output/download.done ]; then
+              echo "[BUILD] Download completed, exiting"
+              exit 0
+            fi
+            sleep 1
+            timeout=\$((timeout - 1))
+          done
+          echo "[BUILD] Timeout waiting for download"
+          exit 1
         resources:
-          limits:
-            cpu: "4"
-            memory: "4Gi"
           requests:
             cpu: "1"
             memory: "1Gi"
+          limits:
+            cpu: "4"
+            memory: "4Gi"
         securityContext:
           seccompProfile:
             type: Unconfined
@@ -152,6 +164,52 @@ spec:
           mountPath: /output
         - name: cache
           mountPath: /home/user/.local/share/buildkit
+      
+      # Download monitor container
+      - name: monitor
+        image: busybox
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          echo "[MONITOR] Waiting for build to complete..."
+          
+          # Wait for build signal
+          while [ ! -f /output/download.signal ]; do
+            sleep 1
+          done
+          
+          # Check build status
+          if grep -q "failed" /output/download.signal; then
+            echo "[MONITOR] Build failed, exiting"
+            exit 1
+          fi
+          
+          echo "[MONITOR] Build succeeded, ready for download"
+          
+          # Keep alive until download is done
+          timeout=${DOWNLOAD_TIMEOUT}
+          while [ \$timeout -gt 0 ]; do
+            if [ -f /output/download.done ]; then
+              echo "[MONITOR] Download completed"
+              exit 0
+            fi
+            sleep 1
+            timeout=\$((timeout - 1))
+          done
+          
+          echo "[MONITOR] Download timeout"
+          exit 1
+        resources:
+          requests:
+            cpu: "0.1"
+            memory: "64Mi"
+          limits:
+            cpu: "0.5"
+            memory: "256Mi"
+        volumeMounts:
+        - name: output
+          mountPath: /output
+      
       volumes:
       - name: dockerfile
         configMap:
@@ -169,14 +227,13 @@ spec:
 EOF
 }
 
-# Wait for build and download
-wait_and_download() {
+# Monitor build and download when ready
+monitor_and_download() {
     local output_file=$1
     local local_path=$2
     
+    # Wait for pod to start
     log INFO "Waiting for pod to start..."
-    
-    # Wait for pod
     local pod_name=""
     for i in {1..30}; do
         pod_name=$(kubectl get pods -n ${NAMESPACE} -l job-name=${IMAGE_NAME} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
@@ -194,48 +251,62 @@ wait_and_download() {
     log INFO "Pod started: $pod_name"
     
     # Wait for init to complete
-    log INFO "Waiting for init container..."
-    kubectl wait --for=condition=Initialized pod/$pod_name -n ${NAMESPACE} --timeout=60s
+    kubectl wait --for=condition=Initialized pod/$pod_name -n ${NAMESPACE} --timeout=60s || {
+        log ERROR "Init containers failed"
+        return 1
+    }
     
-    # Stream logs
-    log INFO "Following build logs..."
+    # Monitor build progress
+    log INFO "Monitoring build progress..."
+    local last_line=""
+    local build_done=false
+    local start_time=$(date +%s)
     
-    # Wait for container to start
-    local retries=0
-    while [ $retries -lt 10 ]; do
-        if kubectl logs $pod_name -c build -n ${NAMESPACE} >/dev/null 2>&1; then
-            break
+    while [ "$build_done" = false ]; do
+        # Check timeout
+        local current_time=$(date +%s)
+        if [ $((current_time - start_time)) -gt $BUILD_TIMEOUT ]; then
+            log ERROR "Build timeout after ${BUILD_TIMEOUT}s"
+            return 1
         fi
+        
+        # Get latest logs
+        local logs=$(kubectl logs $pod_name -c build -n ${NAMESPACE} --tail=20 2>/dev/null || echo "")
+        
+        # Check for completion markers
+        if echo "$logs" | grep -q "\[BUILD\] Success!"; then
+            build_done=true
+            log SUCCESS "Build completed successfully!"
+        elif echo "$logs" | grep -q "\[BUILD\] Failed!"; then
+            log ERROR "Build failed!"
+            echo "$logs" | tail -10
+            return 1
+        else
+            # Show progress
+            local new_line=$(echo "$logs" | grep -E "^#[0-9]+" | tail -1)
+            if [ "$new_line" != "$last_line" ] && [ -n "$new_line" ]; then
+                echo "  $new_line"
+                last_line="$new_line"
+            fi
+        fi
+        
         sleep 1
-        retries=$((retries + 1))
     done
     
-    # Now stream the logs
-    kubectl logs -f $pod_name -c build -n ${NAMESPACE} 2>&1 | while read line; do
-        echo "  $line"
-    done || true
-    
-    # Check if build was successful by looking for the success message
-    sleep 2
-    local build_status=$(kubectl logs $pod_name -c build -n ${NAMESPACE} --tail=20 | grep -c "Build successful" || true)
-    if [ "$build_status" -eq 0 ]; then
-        log ERROR "Build failed!"
-        return 1
-    fi
-    
-    log SUCCESS "Build completed successfully"
-    
-    # Download the image while container is still running
+    # Download immediately
     log INFO "Downloading image..."
-    kubectl cp ${NAMESPACE}/${pod_name}:/output/${output_file} ${local_path} -c build
-    
-    if [ -f "$local_path" ] && [ -s "$local_path" ]; then
-        log SUCCESS "Image downloaded: $local_path"
-        return 0
-    else
-        log ERROR "Failed to download image or image is empty"
-        return 1
+    if kubectl cp ${NAMESPACE}/${pod_name}:/output/${output_file} ${local_path} -c build; then
+        # Signal download complete
+        kubectl exec $pod_name -c build -n ${NAMESPACE} -- touch /output/download.done 2>/dev/null || true
+        
+        if [ -f "$local_path" ] && [ -s "$local_path" ]; then
+            log SUCCESS "Image downloaded: $local_path ($(ls -lh "$local_path" | awk '{print $5}'))"
+            return 0
+        fi
     fi
+    
+    log ERROR "Failed to download image"
+    return 1
 }
 
 # Validate OCI image
@@ -244,36 +315,28 @@ validate_image() {
     
     log INFO "Validating OCI image..."
     
-    # Basic tar check
     if ! tar -tf "$image_path" >/dev/null 2>&1; then
-        log ERROR "Not a valid tar archive"
+        log ERROR "Invalid tar archive"
         return 1
     fi
     
-    # Check OCI structure
+    # Check required files
     local has_layout=$(tar -tf "$image_path" | grep -c "^oci-layout$" || true)
     local has_index=$(tar -tf "$image_path" | grep -c "^index.json$" || true)
     local has_blobs=$(tar -tf "$image_path" | grep -c "^blobs/" || true)
     
     if [ "$has_layout" -eq 0 ] || [ "$has_index" -eq 0 ] || [ "$has_blobs" -eq 0 ]; then
-        log ERROR "Invalid OCI image structure"
+        log ERROR "Invalid OCI structure"
         return 1
     fi
     
-    # Extract details
-    local size=$(ls -lh "$image_path" | awk '{print $5}')
-    local blobs=$(tar -tf "$image_path" | grep -c "^blobs/sha256/" || true)
+    log SUCCESS "Valid OCI image"
+    log INFO "  Blobs: $(tar -tf "$image_path" | grep -c "^blobs/sha256/" || echo 0)"
     
-    log SUCCESS "Valid OCI image!"
-    log INFO "  Size: $size"
-    log INFO "  Blobs: $blobs"
-    
-    # Try to show config
+    # Show manifest info if jq available
     if command -v jq >/dev/null 2>&1; then
-        local index_json=$(tar -xOf "$image_path" index.json 2>/dev/null)
-        if [ -n "$index_json" ]; then
-            echo "$index_json" | jq -r '.manifests[0] | "  Platform: \(.platform.os)/\(.platform.architecture)"' 2>/dev/null || true
-        fi
+        local platform=$(tar -xOf "$image_path" index.json 2>/dev/null | jq -r '.manifests[0].platform | "\(.os)/\(.architecture)"' 2>/dev/null || echo "unknown")
+        log INFO "  Platform: $platform"
     fi
     
     return 0
@@ -282,17 +345,24 @@ validate_image() {
 # Main
 main() {
     if [ $# -lt 1 ]; then
-        echo "Usage: $0 <dockerfile> [context-dir] [output-file]"
-        echo ""
-        echo "Build a container image using BuildKit on Kubernetes"
-        echo ""
-        echo "Arguments:"
-        echo "  dockerfile    Path to Dockerfile"
-        echo "  context-dir   Build context directory (default: dockerfile directory)"
-        echo "  output-file   Output filename (default: image.tar)"
-        echo ""
-        echo "Environment:"
-        echo "  K8S_NAMESPACE Kubernetes namespace (default: eir)"
+        cat <<EOF
+Usage: $0 <dockerfile> [context-dir] [output-file]
+
+Build container images using BuildKit on Kubernetes (rootless)
+
+Arguments:
+  dockerfile    Path to Dockerfile
+  context-dir   Build context directory (default: dockerfile directory)  
+  output-file   Output filename (default: image.tar)
+
+Environment:
+  K8S_NAMESPACE    Kubernetes namespace (default: eir)
+  BUILD_TIMEOUT    Build timeout in seconds (default: 300)
+  DOWNLOAD_TIMEOUT Download timeout in seconds (default: 60)
+
+Example:
+  $0 Dockerfile . myimage.tar
+EOF
         exit 1
     fi
     
@@ -301,7 +371,7 @@ main() {
     local output_file=${3:-image.tar}
     local output_path="$(pwd)/$output_file"
     
-    # Validate inputs
+    # Validate
     if [ ! -f "$dockerfile" ]; then
         log ERROR "Dockerfile not found: $dockerfile"
         exit 1
@@ -312,23 +382,27 @@ main() {
         exit 1
     fi
     
-    log INFO "Shmocker Kubernetes Build"
-    log INFO "========================="
+    # Start build
+    local start_time=$(date +%s)
+    
+    echo ""
+    log INFO "🚀 Shmocker Kubernetes Build"
     log INFO "Dockerfile: $dockerfile"
-    log INFO "Context: $context_dir"
+    log INFO "Context: $context_dir"  
     log INFO "Output: $output_path"
-    log INFO "Namespace: $NAMESPACE"
     echo ""
     
-    # Build
-    create_build_job "$dockerfile" "$context_dir" "$(basename $output_file)"
+    # Execute
+    create_job "$dockerfile" "$context_dir" "$(basename $output_file)"
     
-    if wait_and_download "$(basename $output_file)" "$output_path"; then
+    if monitor_and_download "$(basename $output_file)" "$output_path"; then
         validate_image "$output_path"
+        
+        local duration=$(($(date +%s) - start_time))
         echo ""
-        log SUCCESS "Build complete! Image saved to: $output_path"
-        log INFO "Load with: docker load < $output_path"
-        log INFO "Or push with: skopeo copy oci-archive:$output_path docker://registry/image:tag"
+        log SUCCESS "✅ Build complete in ${duration}s"
+        log INFO "📦 Load with: docker load < $output_path"
+        log INFO "🚢 Push with: skopeo copy oci-archive:$output_path docker://registry/image:tag"
     else
         exit 1
     fi
