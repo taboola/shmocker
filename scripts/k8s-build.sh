@@ -534,7 +534,7 @@ EOF
         echo ""
         log INFO "📦 To use your image:"
         log INFO "  • With Docker: ${CYAN}docker load < $output_path${NC}"
-        log INFO "  • With Podman: ${CYAN}podman load < $output_path${NC}"
+        log INFO "  • With Podman: ${CYAN}podman load --input $output_path${NC}"
         log INFO "  • With Skopeo: ${CYAN}skopeo copy oci-archive:$output_path docker://registry/repo:tag${NC}"
         echo ""
         log DEBUG "Remember: This image was built without Docker. Share responsibly! 🚀"

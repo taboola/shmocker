@@ -8,6 +8,49 @@ Did you know that Docker already exists? Well, our AI overlords didn't get that 
 
 But hey, at least it's rootless! Because nothing says "innovation" like taking something that works and making it more complicated.
 
+## What Shmocker Actually Is (An Architectural Confession)
+
+Let's be honest: Shmocker isn't trying to replace the wheel. We're more like the people who looked at a perfectly good wheel and said, "What if we gave it a better user interface?"
+
+### The Real Architecture
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│     You     │────▶│   Shmocker   │────▶│  BuildKit   │
+│ (Dockerfile)│     │  (Translator) │     │  (Builder)  │
+└─────────────┘     └──────────────┘     └─────────────┘
+                            │                     │
+                            ▼                     ▼
+                     ┌──────────────┐      ┌───────────┐
+                     │  Kubernetes  │      │ OCI Image │
+                     │(Orchestrator)│      │ (Output)  │
+                     └──────────────┘      └───────────┘
+```
+
+### Division of Labor (Or: What We Actually Built vs. What We Borrowed)
+
+**What Shmocker Does (Our Actual Code):**
+- 📖 **Dockerfile Parser**: A lovingly hand-crafted lexer and parser that understands all 47 flavors of Dockerfile syntax
+- 🎯 **CLI Interface**: Because `shmocker build` sounds cooler than `buildctl build --frontend dockerfile.v0 --local context=.`
+- 🔄 **Translation Layer**: Converts our parsed AST into BuildKit's LLB format (it's like Google Translate for container instructions)
+- 🎼 **Kubernetes Orchestration**: Manages the intricate dance of ConfigMaps, Pods, and hope
+
+**What BuildKit Does (The Actual Magic):**
+- 🏗️ **Image Building**: The real hero that executes RUN commands, manages layers, and makes containers happen
+- 🔒 **Rootless Execution**: All the namespace and cgroup wizardry that makes security folks happy
+- 📦 **Registry Operations**: Pulls base images, pushes results, handles auth (the boring but crucial stuff)
+- ⚡ **Intelligent Caching**: Makes rebuilds fast because waiting is for chumps
+
+### In Restaurant Terms
+
+Think of it this way:
+- **You**: The customer with a recipe (Dockerfile)
+- **Shmocker**: The helpful waiter who checks your order makes sense and translates it to kitchen-speak
+- **BuildKit**: The master chef who actually cooks your meal
+- **Kubernetes**: The restaurant infrastructure that makes it all possible
+
+We're not claiming to be Gordon Ramsay here. We're more like that friendly server who makes sure your order gets to the kitchen correctly and brings you your food while it's still hot.
+
 ## Features (Or: Things Docker Already Does, But Now With More Steps)
 
 - **Rootless container image building** - Because sudo is apparently too mainstream
@@ -76,21 +119,51 @@ docker build -t shmocker .
 
 *Yes, we use Docker to build a Docker replacement. The autonomous agents found this hilarious.*
 
-## Usage (Or: How to Replace One Command With Another)
+## Usage (Or: How to Replace One Command With Many)
+
+### The Kubernetes Way (What We Actually Built)
 
 ```bash
-# Build an image (just like docker build, but different)
-shmocker build /path/to/build/context
+# Build an image using BuildKit on Kubernetes
+./scripts/k8s-build.sh Dockerfile . myimage.tar
 
-# Build with custom tag (because naming things is hard)
-shmocker build -t myimage:latest /path/to/build/context
+# What actually happens behind the scenes:
+# 1. Uploads your Dockerfile to Kubernetes (as a ConfigMap)
+# 2. Spins up a rootless BuildKit pod 
+# 3. BuildKit does the actual building (we just watch)
+# 4. Downloads the OCI image to your machine
+# 5. Cleans up and pretends it was seamless
 
-# Build with SBOM generation (document your supply chain sins)
-shmocker build --sbom -t myimage:latest /path/to/build/context
-
-# Build and sign the image (cryptographically guarantee it's our fault)
-shmocker build --sign -t myimage:latest /path/to/build/context
+# Load it into your runtime of choice
+docker load < myimage.tar              # Yes, the irony burns
+podman load --input myimage.tar        # For the Docker-averse
 ```
+
+### The Local Way (For macOS Masochists)
+
+```bash
+# One-time setup (downloads Ubuntu, because of course it does)
+./scripts/setup-macos-colima.sh
+
+# Start your personal Linux (when you need to build)
+colima start
+
+# Build through a VM, SSH tunnel, and prayer
+shmocker build -t my-image:latest .
+
+# Stop the VM (save those precious macOS resources)
+colima stop
+```
+
+### What About the Go Binary?
+
+Oh, that beautiful `shmocker` binary we built? It's more of an aspirational piece. It can:
+- Parse your Dockerfile (we're really good at reading!)
+- Validate the syntax (we'll tell you what's wrong!)
+- Generate an AST (Abstract Syntax Trees are cool!)
+- ...and then politely inform you that actual building requires BuildKit
+
+Think of it as a very sophisticated Dockerfile linter that dreams of one day becoming a real build tool.
 
 ## macOS Support (Or: VMs All The Way Down)
 
@@ -160,30 +233,61 @@ Our GitHub Actions workflow is a masterpiece of automation:
 
 ## Status (Or: The Current State of Our Hubris)
 
-🚧 **This project is currently in the "what have we done" phase.**
+🚀 **This project actually works!** (We're as surprised as you are)
 
-Our autonomous agents have established a magnificent foundation, but they're still working on making it actually *do* anything:
+Here's what our autonomous agents have accomplished:
 
-- [ ] Dockerfile parsing (turning text into more text)
-- [ ] Image building logic (the hard part we conveniently ignored)
-- [ ] Registry operations (talking to Docker Hub, but different)
-- [ ] SBOM generation (cataloging our technical debt)
-- [ ] Image signing (digitally signing our mistakes)
-- [ ] Build caching (caching broken builds for efficiency)
+- ✅ **Dockerfile parsing** - Complete lexer and parser supporting Docker 24.x syntax
+- ✅ **Image building** - Via BuildKit on Kubernetes (we delegate like pros)
+- ✅ **Kubernetes integration** - Automated deployment script that actually works
+- ✅ **Rootless execution** - No root required, security team approved
+- ✅ **Multi-stage builds** - Because one stage is never enough
+- ✅ **Build caching** - BuildKit handles it, we take the credit
+- ✅ **OCI image output** - Standards-compliant images that work everywhere
+- 🚧 **Registry operations** - Can pull images, pushing is a TODO
+- 🚧 **SBOM generation** - The code exists but refuses to compile
+- 🚧 **Image signing** - Theoretically possible, practically untested
+
+### What Actually Works Today
+
+```bash
+# This will actually build your image
+./scripts/k8s-build.sh Dockerfile . myimage.tar
+
+# This will actually run
+podman load --input myimage.tar
+podman run myimage:latest
+```
+
+It's not pretty, it's not fast, but it builds images without Docker. Mission accomplished? 🎉
 
 ## FAQ (Frequently Avoided Questions)
 
 **Q: Why does this exist?**  
-A: Autonomous AI agents don't ask "why," they ask "why not?"
+A: Because sometimes you need to build container images on Kubernetes without Docker. Also, autonomous AI agents don't ask "why," they ask "why not?"
 
 **Q: Is this better than Docker?**  
-A: Define "better." It's certainly more complicated.
+A: It's not trying to be better than Docker. It's trying to be Docker-without-Docker. Think of it as Docker's rootless cousin who went to art school.
+
+**Q: What does Shmocker actually do?**  
+A: We parse Dockerfiles, validate them, then politely ask BuildKit to do the actual building. We're like a very sophisticated middleman with good intentions.
 
 **Q: Should I use this in production?**  
-A: Only if you enjoy explaining to your team why your build system was written by robots.
+A: If you're already running Kubernetes and need rootless builds, why not? The core building is done by BuildKit, which is production-ready. We just add a layer of convenience and humor.
 
 **Q: Will this replace Docker?**  
-A: About as much as cryptocurrency replaced traditional currency.
+A: No. We literally use BuildKit, which is from the Docker/Moby project. We're more like Docker's helpful friend who knows how to work with Kubernetes.
+
+**Q: Why not just use BuildKit directly?**  
+A: You could! But then you'd have to:
+- Write your own Kubernetes manifests
+- Handle ConfigMap creation
+- Manage pod lifecycle
+- Download images manually
+- Miss out on our delightful error messages
+
+**Q: Is this a real project or an elaborate joke?**  
+A: Yes.
 
 ## License
 
