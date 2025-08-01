@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shmocker-demo
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildkit
+  namespace: shmocker-demo
+spec:
+  clusterIP: None
+  selector:
+    app: buildkit
+  ports:
+  - port: 1234
+    targetPort: 1234
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: buildkit
+  namespace: shmocker-demo
+spec:
+  serviceName: buildkit
+  replicas: 1
+  selector:
+    matchLabels:
+      app: buildkit
+  template:
+    metadata:
+      labels:
+        app: buildkit
+    spec:
+      containers:
+      - name: buildkit
+        image: moby/buildkit:v0.17.0-rootless
+        args:
+        - --addr
+        - unix:///run/user/1000/buildkit/buildkitd.sock
+        - --addr
+        - tcp://0.0.0.0:1234
+        - --oci-worker-no-process-sandbox
+        ports:
+        - containerPort: 1234
+          name: buildkit
+        securityContext:
+          seccompProfile:
+            type: Unconfined
+          appArmorProfile:
+            type: Unconfined
+          runAsUser: 1000
+          runAsGroup: 1000
+        volumeMounts:
+        - name: buildkit-cache
+          mountPath: /home/user/.local/share/buildkit
+        readinessProbe:
+          exec:
+            command:
+            - buildctl
+            - debug
+            - workers
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command:
+            - buildctl
+            - debug
+            - workers
+          initialDelaySeconds: 10
+          periodSeconds: 30
+  volumeClaimTemplates:
+  - metadata:
+      name: buildkit-cache
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi

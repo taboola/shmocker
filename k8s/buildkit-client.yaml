@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: buildkit-client-files
+  namespace: shmocker-demo
+data:
+  Dockerfile: |
+    FROM alpine:latest
+    RUN echo "Building with shmocker via BuildKit service!"
+    RUN apk add --no-cache curl jq
+    WORKDIR /app
+    RUN echo '{"message": "Hello from shmocker!"}' > response.json
+    CMD ["sh", "-c", "while true; do nc -l -p 8080 -e sh -c 'echo -e \"HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\n\\r\\n$(cat response.json)\"'; done"]
+  build-with-service.sh: |
+    #!/bin/sh
+    echo "=== Shmocker BuildKit Client Demo ==="
+    echo "Connecting to BuildKit service..."
+    
+    buildctl \
+      --addr tcp://buildkit.shmocker-demo.svc.cluster.local:1234 \
+      build \
+      --frontend dockerfile.v0 \
+      --local context=/workspace \
+      --local dockerfile=/workspace \
+      --output type=oci,dest=/workspace/image.tar
+    
+    echo "Build complete!"
+    ls -lh /workspace/image.tar
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: buildkit-client
+  namespace: shmocker-demo
+spec:
+  containers:
+  - name: client
+    image: moby/buildkit:v0.17.0  # Regular version with buildctl
+    command:
+    - /bin/sh
+    - -c
+    - |
+      echo "BuildKit client ready"
+      echo "To build, run: kubectl exec -n shmocker-demo buildkit-client -- /workspace/build-with-service.sh"
+      sleep infinity
+    volumeMounts:
+    - name: client-files
+      mountPath: /workspace
+  volumes:
+  - name: client-files
+    configMap:
+      name: buildkit-client-files
+      defaultMode: 0755

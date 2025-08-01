@@ -1,0 +1,80 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: shmocker-extract-image
+  namespace: eir
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+      - name: build-image
+        image: moby/buildkit:v0.17.0-rootless
+        env:
+        - name: BUILDKITD_FLAGS
+          value: --oci-worker-no-process-sandbox
+        command:
+        - buildctl-daemonless.sh
+        args:
+        - build
+        - --frontend
+        - dockerfile.v0
+        - --local
+        - context=/workspace
+        - --local
+        - dockerfile=/workspace
+        - --output
+        - type=oci,dest=/output/shmocker-demo.tar
+        resources:
+          limits:
+            cpu: "4"
+            memory: "4Gi"
+          requests:
+            cpu: "1"
+            memory: "1Gi"
+        securityContext:
+          seccompProfile:
+            type: Unconfined
+          runAsUser: 1000
+          runAsGroup: 1000
+        volumeMounts:
+        - name: dockerfile
+          mountPath: /workspace
+        - name: output
+          mountPath: /output
+        - name: buildkitd
+          mountPath: /home/user/.local/share/buildkit
+      containers:
+      - name: serve-image
+        image: busybox
+        command:
+        - sh
+        - -c
+        - |
+          echo "Image built successfully!"
+          ls -lh /output/
+          echo ""
+          echo "Starting HTTP server on port 8080..."
+          echo "To download: kubectl port-forward -n eir job/shmocker-extract-image 8080:8080"
+          echo "Then visit: http://localhost:8080/shmocker-demo.tar"
+          cd /output && httpd -f -p 8080
+        resources:
+          limits:
+            cpu: "0.5"
+            memory: "256Mi"
+          requests:
+            cpu: "0.1"
+            memory: "64Mi"
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: output
+          mountPath: /output
+      volumes:
+      - name: dockerfile
+        configMap:
+          name: shmocker-dockerfile
+      - name: output
+        emptyDir: {}
+      - name: buildkitd
+        emptyDir: {}
