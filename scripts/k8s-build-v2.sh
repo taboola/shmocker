@@ -6,8 +6,6 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-GRAY='\033[0;90m'
 NC='\033[0m'
 
 # Configuration
@@ -16,17 +14,7 @@ IMAGE_NAME="shmocker-build-$$"
 BUILD_TIMEOUT=${BUILD_TIMEOUT:-300}
 DOWNLOAD_TIMEOUT=${DOWNLOAD_TIMEOUT:-60}
 
-# Banner
-show_banner() {
-    echo ""
-    echo -e "${CYAN}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}  🚀 ${BLUE}Shmocker${NC} - Because reinventing Docker is easier      ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}     than reading the docs™                                 ${CYAN}║${NC}"
-    echo -e "${CYAN}╚════════════════════════════════════════════════════════════╝${NC}"
-    echo ""
-}
-
-# Logging with context
+# Logging
 log() {
     local level=$1
     shift
@@ -35,24 +23,15 @@ log() {
         SUCCESS) echo -e "${GREEN}[SUCCESS]${NC} $*" ;;
         INFO) echo -e "${BLUE}[INFO]${NC} $*" ;;
         WARN) echo -e "${YELLOW}[WARN]${NC} $*" ;;
-        DEBUG) echo -e "${GRAY}[DEBUG]${NC} $*" ;;
-        STEP) echo -e "${CYAN}[STEP]${NC} $*" ;;
     esac
 }
 
 # Cleanup
 cleanup() {
-    if [ -n "$CLEANUP_DONE" ]; then
-        return
-    fi
-    CLEANUP_DONE=1
-    
-    echo ""
-    log STEP "Cleaning up Kubernetes resources..."
+    log INFO "Cleaning up..."
     kubectl delete job ${IMAGE_NAME} -n ${NAMESPACE} --ignore-not-found=true 2>/dev/null
     kubectl delete configmap ${IMAGE_NAME}-dockerfile -n ${NAMESPACE} --ignore-not-found=true 2>/dev/null
     kubectl delete configmap ${IMAGE_NAME}-context -n ${NAMESPACE} --ignore-not-found=true 2>/dev/null
-    log DEBUG "Cleanup complete. Thanks for choosing the Docker replacement that Docker doesn't know about!"
 }
 
 trap cleanup EXIT
@@ -63,39 +42,31 @@ create_job() {
     local context_dir=$2
     local output_file=$3
     
-    log STEP "Preparing to build without Docker (yes, really!)..."
-    log DEBUG "Creating ConfigMaps for your Dockerfile and context"
+    log INFO "Creating build job..."
     
     # Create Dockerfile ConfigMap
     kubectl create configmap ${IMAGE_NAME}-dockerfile \
         --from-file=Dockerfile=${dockerfile_path} \
         -n ${NAMESPACE} \
-        --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+        --dry-run=client -o yaml | kubectl apply -f -
     
     # Create context ConfigMap if needed
     local has_context=false
     if [ -n "$(find ${context_dir} -type f ! -name "*.dockerfile" ! -name "Dockerfile" 2>/dev/null | head -1)" ]; then
         has_context=true
-        log DEBUG "Found context files, packaging them up..."
         kubectl create configmap ${IMAGE_NAME}-context \
             --from-file=${context_dir} \
             -n ${NAMESPACE} \
-            --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+            --dry-run=client -o yaml | kubectl apply -f -
     fi
     
-    log STEP "Deploying BuildKit pod on Kubernetes (rootless, because we're fancy)..."
-    
     # Job manifest with sidecar pattern
-    cat <<EOF | kubectl apply -f - >/dev/null
+    cat <<EOF | kubectl apply -f -
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: ${IMAGE_NAME}
   namespace: ${NAMESPACE}
-  labels:
-    app: shmocker
-    purpose: "docker-replacement"
-    irony-level: "high"
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 300
@@ -108,7 +79,6 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
         - |
-          echo "📦 Preparing build context..."
           cp /dockerfile/Dockerfile /workspace/
           if [ -d /context ]; then
             cd /context
@@ -116,7 +86,7 @@ spec:
               [ -f "\$f" ] && [ "\$f" != "Dockerfile" ] && cp "\$f" /workspace/
             done
           fi
-          echo "✓ Workspace ready with $(ls -1 /workspace | wc -l) files"
+          ls -la /workspace/
         resources:
           requests:
             cpu: "0.1"
@@ -141,7 +111,7 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
         - |
-          echo "[BUILD] 🔨 Starting BuildKit (the engine that Docker wishes it invented)..."
+          echo "[BUILD] Starting BuildKit..."
           
           # Run the build
           if buildctl-daemonless.sh build \
@@ -151,32 +121,30 @@ spec:
             --output type=oci,dest=/output/${output_file} \
             --progress plain; then
             
-            echo "[BUILD] ✅ Success! Image size: \$(ls -lh /output/${output_file} | awk '{print \$5}')"
-            echo "[BUILD] 🎉 Built without Docker, root, or regrets!"
+            echo "[BUILD] Success! Image size: \$(ls -lh /output/${output_file} | awk '{print \$5}')"
             touch /output/build.success
             
-            # Signal completion
+            # Signal completion to download container
             echo "ready" > /output/download.signal
           else
-            echo "[BUILD] ❌ Failed! But hey, at least we tried without Docker..."
+            echo "[BUILD] Failed!"
             touch /output/build.failed
             echo "failed" > /output/download.signal
-            exit 1
           fi
           
-          # Wait for download
-          echo "[BUILD] 📡 Waiting for download confirmation..."
+          # Wait for download to complete or timeout
+          echo "[BUILD] Waiting for download completion..."
           timeout=60
           while [ \$timeout -gt 0 ]; do
             if [ -f /output/download.done ]; then
-              echo "[BUILD] 👋 Download complete, mission accomplished!"
+              echo "[BUILD] Download completed, exiting"
               exit 0
             fi
             sleep 1
             timeout=\$((timeout - 1))
           done
-          echo "[BUILD] ⏰ Download timeout - but the image is ready!"
-          exit 0
+          echo "[BUILD] Timeout waiting for download"
+          exit 1
         resources:
           requests:
             cpu: "1"
@@ -197,13 +165,13 @@ spec:
         - name: cache
           mountPath: /home/user/.local/share/buildkit
       
-      # Monitor sidecar
+      # Download monitor container
       - name: monitor
         image: busybox
         command: ["/bin/sh", "-c"]
         args:
         - |
-          echo "[MONITOR] 👀 Watching for build completion..."
+          echo "[MONITOR] Waiting for build to complete..."
           
           # Wait for build signal
           while [ ! -f /output/download.signal ]; do
@@ -212,22 +180,25 @@ spec:
           
           # Check build status
           if grep -q "failed" /output/download.signal; then
-            echo "[MONITOR] 💔 Build failed"
+            echo "[MONITOR] Build failed, exiting"
             exit 1
           fi
           
-          echo "[MONITOR] 🎯 Build succeeded, standing by..."
+          echo "[MONITOR] Build succeeded, ready for download"
           
-          # Keep alive for download
+          # Keep alive until download is done
           timeout=${DOWNLOAD_TIMEOUT}
           while [ \$timeout -gt 0 ]; do
             if [ -f /output/download.done ]; then
+              echo "[MONITOR] Download completed"
               exit 0
             fi
             sleep 1
             timeout=\$((timeout - 1))
           done
-          exit 0
+          
+          echo "[MONITOR] Download timeout"
+          exit 1
         resources:
           requests:
             cpu: "0.1"
@@ -254,8 +225,6 @@ spec:
       - name: cache
         emptyDir: {}
 EOF
-
-    log SUCCESS "BuildKit pod deployed! (No Docker daemon harmed in this process)"
 }
 
 # Monitor build and download when ready
@@ -264,102 +233,79 @@ monitor_and_download() {
     local local_path=$2
     
     # Wait for pod to start
-    log STEP "Waiting for BuildKit pod to start..."
-    log DEBUG "Finding your pod among the Kubernetes wilderness..."
-    
+    log INFO "Waiting for pod to start..."
     local pod_name=""
-    local dots=""
     for i in {1..30}; do
         pod_name=$(kubectl get pods -n ${NAMESPACE} -l job-name=${IMAGE_NAME} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
         if [ -n "$pod_name" ]; then
-            echo ""
             break
         fi
-        dots="${dots}."
-        printf "\r${GRAY}Searching for pod${dots}${NC}"
         sleep 1
     done
     
     if [ -z "$pod_name" ]; then
-        echo ""
-        log ERROR "Pod didn't show up. Even Kubernetes is confused about building without Docker!"
+        log ERROR "Pod not created within 30 seconds"
         return 1
     fi
     
-    log SUCCESS "Pod discovered: ${pod_name}"
-    log DEBUG "It's alive! (And rootless, which is the important part)"
+    log INFO "Pod started: $pod_name"
     
-    # Wait for init
-    log STEP "Initializing build environment..."
-    kubectl wait --for=condition=Initialized pod/$pod_name -n ${NAMESPACE} --timeout=60s >/dev/null 2>&1 || {
-        log ERROR "Initialization failed. The irony is not lost on us."
+    # Wait for init to complete
+    kubectl wait --for=condition=Initialized pod/$pod_name -n ${NAMESPACE} --timeout=60s || {
+        log ERROR "Init containers failed"
         return 1
     }
     
-    # Monitor build
-    log STEP "Building your image (without Docker, as promised)..."
-    echo -e "${GRAY}Build progress:${NC}"
-    
+    # Monitor build progress
+    log INFO "Monitoring build progress..."
     local last_line=""
     local build_done=false
     local start_time=$(date +%s)
-    local spinner=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-    local spin_idx=0
     
     while [ "$build_done" = false ]; do
         # Check timeout
         local current_time=$(date +%s)
         if [ $((current_time - start_time)) -gt $BUILD_TIMEOUT ]; then
-            echo ""
-            log ERROR "Build timeout. Even BuildKit has limits!"
+            log ERROR "Build timeout after ${BUILD_TIMEOUT}s"
             return 1
         fi
         
-        # Get logs
-        local logs=$(kubectl logs $pod_name -c build -n ${NAMESPACE} --tail=30 2>/dev/null || echo "")
+        # Get latest logs
+        local logs=$(kubectl logs $pod_name -c build -n ${NAMESPACE} --tail=20 2>/dev/null || echo "")
         
-        # Check completion
-        if echo "$logs" | grep -q "Success!"; then
+        # Check for completion markers
+        if echo "$logs" | grep -q "\[BUILD\] Success!"; then
             build_done=true
-            echo ""
-            log SUCCESS "Build completed! 🎉"
-            log DEBUG "See? Who needs Docker when you have BuildKit and determination?"
-        elif echo "$logs" | grep -q "Failed!"; then
-            echo ""
-            log ERROR "Build failed. But at least it failed without Docker!"
-            echo "$logs" | grep -A5 "error:" | tail -10
+            log SUCCESS "Build completed successfully!"
+        elif echo "$logs" | grep -q "\[BUILD\] Failed!"; then
+            log ERROR "Build failed!"
+            echo "$logs" | tail -10
             return 1
         else
             # Show progress
             local new_line=$(echo "$logs" | grep -E "^#[0-9]+" | tail -1)
             if [ "$new_line" != "$last_line" ] && [ -n "$new_line" ]; then
-                printf "\r${GRAY}  %s${NC}\n" "$new_line"
+                echo "  $new_line"
                 last_line="$new_line"
-            else
-                printf "\r${spinner[$spin_idx]} Building..."
-                spin_idx=$(( (spin_idx + 1) % ${#spinner[@]} ))
             fi
         fi
         
-        sleep 0.5
+        sleep 1
     done
     
-    # Download
-    log STEP "Downloading your freshly-built OCI image..."
-    log DEBUG "Transferring from Kubernetes ephemeral storage to your disk"
-    
-    if kubectl cp ${NAMESPACE}/${pod_name}:/output/${output_file} ${local_path} -c build 2>&1 | grep -v "tar: removing"; then
-        # Signal completion
+    # Download immediately
+    log INFO "Downloading image..."
+    if kubectl cp ${NAMESPACE}/${pod_name}:/output/${output_file} ${local_path} -c build; then
+        # Signal download complete
         kubectl exec $pod_name -c build -n ${NAMESPACE} -- touch /output/download.done 2>/dev/null || true
         
         if [ -f "$local_path" ] && [ -s "$local_path" ]; then
-            local size=$(ls -lh "$local_path" | awk '{print $5}')
-            log SUCCESS "Image saved: $(basename $local_path) (${size})"
+            log SUCCESS "Image downloaded: $local_path ($(ls -lh "$local_path" | awk '{print $5}'))"
             return 0
         fi
     fi
     
-    log ERROR "Download failed. The image exists but refuses to leave Kubernetes."
+    log ERROR "Failed to download image"
     return 1
 }
 
@@ -367,36 +313,30 @@ monitor_and_download() {
 validate_image() {
     local image_path=$1
     
-    log STEP "Validating OCI image structure..."
-    log DEBUG "Making sure it's a real container image, not just a tarball with dreams"
+    log INFO "Validating OCI image..."
     
     if ! tar -tf "$image_path" >/dev/null 2>&1; then
-        log ERROR "Not a valid tar archive. BuildKit betrayed us!"
+        log ERROR "Invalid tar archive"
         return 1
     fi
     
-    # Check OCI compliance
+    # Check required files
     local has_layout=$(tar -tf "$image_path" | grep -c "^oci-layout$" || true)
     local has_index=$(tar -tf "$image_path" | grep -c "^index.json$" || true)
     local has_blobs=$(tar -tf "$image_path" | grep -c "^blobs/" || true)
     
     if [ "$has_layout" -eq 0 ] || [ "$has_index" -eq 0 ] || [ "$has_blobs" -eq 0 ]; then
-        log ERROR "Invalid OCI structure. This isn't the image you're looking for."
+        log ERROR "Invalid OCI structure"
         return 1
     fi
     
-    log SUCCESS "Valid OCI image confirmed! ✅"
+    log SUCCESS "Valid OCI image"
+    log INFO "  Blobs: $(tar -tf "$image_path" | grep -c "^blobs/sha256/" || echo 0)"
     
-    # Show details
-    local blob_count=$(tar -tf "$image_path" | grep -c "^blobs/sha256/" || echo 0)
-    log INFO "Image details:"
-    log INFO "  • Format: OCI (Open Container Initiative)"
-    log INFO "  • Layers: ${blob_count}"
-    
+    # Show manifest info if jq available
     if command -v jq >/dev/null 2>&1; then
         local platform=$(tar -xOf "$image_path" index.json 2>/dev/null | jq -r '.manifests[0].platform | "\(.os)/\(.architecture)"' 2>/dev/null || echo "unknown")
-        log INFO "  • Platform: ${platform}"
-        log INFO "  • Compatible with: Any OCI-compliant runtime (Docker, Podman, etc.)"
+        log INFO "  Platform: $platform"
     fi
     
     return 0
@@ -405,35 +345,23 @@ validate_image() {
 # Main
 main() {
     if [ $# -lt 1 ]; then
-        show_banner
         cat <<EOF
-${BLUE}Welcome to Shmocker!${NC} The rootless, daemonless, Docker-less way to build
-container images. Because sometimes you just need to build an image without
-installing Docker, gaining root access, or questioning your life choices.
+Usage: $0 <dockerfile> [context-dir] [output-file]
 
-${CYAN}Usage:${NC} $0 <dockerfile> [context-dir] [output-file]
+Build container images using BuildKit on Kubernetes (rootless)
 
-${CYAN}Arguments:${NC}
-  ${GREEN}dockerfile${NC}    Path to your Dockerfile
-  ${GREEN}context-dir${NC}   Build context directory (default: dockerfile's directory)  
-  ${GREEN}output-file${NC}   Output filename (default: image.tar)
+Arguments:
+  dockerfile    Path to Dockerfile
+  context-dir   Build context directory (default: dockerfile directory)  
+  output-file   Output filename (default: image.tar)
 
-${CYAN}What it does:${NC}
-  1. Uploads your Dockerfile to Kubernetes (as a ConfigMap)
-  2. Spins up a rootless BuildKit pod (no Docker daemon!)
-  3. Builds your image in a secure, isolated environment
-  4. Downloads the OCI image to your local machine
-  5. Cleans up, leaving no trace (except your image)
+Environment:
+  K8S_NAMESPACE    Kubernetes namespace (default: eir)
+  BUILD_TIMEOUT    Build timeout in seconds (default: 300)
+  DOWNLOAD_TIMEOUT Download timeout in seconds (default: 60)
 
-${CYAN}Environment Variables:${NC}
-  ${YELLOW}K8S_NAMESPACE${NC}    Target namespace (default: eir)
-  ${YELLOW}BUILD_TIMEOUT${NC}    Max build time in seconds (default: 300)
-  ${YELLOW}DOWNLOAD_TIMEOUT${NC} Max download time in seconds (default: 60)
-
-${CYAN}Example:${NC}
-  $0 Dockerfile . my-awesome-image.tar
-
-${GRAY}Remember: Friends don't let friends run Docker daemons in production.${NC}
+Example:
+  $0 Dockerfile . myimage.tar
 EOF
         exit 1
     fi
@@ -443,10 +371,9 @@ EOF
     local output_file=${3:-image.tar}
     local output_path="$(pwd)/$output_file"
     
-    # Validate inputs
+    # Validate
     if [ ! -f "$dockerfile" ]; then
         log ERROR "Dockerfile not found: $dockerfile"
-        log DEBUG "Can't build without instructions. We're good, but not that good."
         exit 1
     fi
     
@@ -455,38 +382,28 @@ EOF
         exit 1
     fi
     
-    # Start
-    show_banner
+    # Start build
     local start_time=$(date +%s)
     
-    log INFO "🎯 Build Request:"
-    log INFO "  • Dockerfile: ${CYAN}$dockerfile${NC}"
-    log INFO "  • Context: ${CYAN}$context_dir${NC}"
-    log INFO "  • Output: ${CYAN}$output_path${NC}"
-    log INFO "  • Namespace: ${CYAN}$NAMESPACE${NC}"
+    echo ""
+    log INFO "🚀 Shmocker Kubernetes Build"
+    log INFO "Dockerfile: $dockerfile"
+    log INFO "Context: $context_dir"  
+    log INFO "Output: $output_path"
     echo ""
     
     # Execute
     create_job "$dockerfile" "$context_dir" "$(basename $output_file)"
     
     if monitor_and_download "$(basename $output_file)" "$output_path"; then
-        echo ""
         validate_image "$output_path"
         
         local duration=$(($(date +%s) - start_time))
         echo ""
-        log SUCCESS "✨ Build completed in ${duration} seconds!"
-        echo ""
-        log INFO "📦 To use your image:"
-        log INFO "  • With Docker: ${CYAN}docker load < $output_path${NC}"
-        log INFO "  • With Podman: ${CYAN}podman load < $output_path${NC}"
-        log INFO "  • With Skopeo: ${CYAN}skopeo copy oci-archive:$output_path docker://registry/repo:tag${NC}"
-        echo ""
-        log DEBUG "Remember: This image was built without Docker. Share responsibly! 🚀"
+        log SUCCESS "✅ Build complete in ${duration}s"
+        log INFO "📦 Load with: docker load < $output_path"
+        log INFO "🚢 Push with: skopeo copy oci-archive:$output_path docker://registry/image:tag"
     else
-        echo ""
-        log ERROR "Build failed. Check the logs above for details."
-        log DEBUG "Even the best Docker alternatives have bad days."
         exit 1
     fi
 }
