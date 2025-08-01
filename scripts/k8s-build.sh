@@ -74,13 +74,48 @@ create_job() {
     
     # Create context ConfigMap if needed
     local has_context=false
-    if [ -n "$(find ${context_dir} -type f ! -name "*.dockerfile" ! -name "Dockerfile" 2>/dev/null | head -1)" ]; then
+    # Find relevant context files, excluding common build artifacts
+    local context_files=$(find ${context_dir} -type f \
+        ! -name "*.dockerfile" \
+        ! -name "Dockerfile" \
+        ! -name "*.tar" \
+        ! -name "*.tar.gz" \
+        ! -name "*.tgz" \
+        ! -name "*.zip" \
+        ! -name ".git" \
+        ! -path "*/.*" \
+        -size -1M \
+        2>/dev/null | head -20)
+    
+    if [ -n "$context_files" ]; then
         has_context=true
-        log DEBUG "Found context files, packaging them up..."
-        kubectl create configmap ${IMAGE_NAME}-context \
-            --from-file=${context_dir} \
+        log DEBUG "Found context files to include:"
+        echo "$context_files" | while read f; do
+            [ -n "$f" ] && log DEBUG "  • $(basename "$f") ($(ls -lh "$f" 2>/dev/null | awk '{print $5}'))"
+        done
+        
+        # Create a temporary directory with only the needed files
+        local temp_context=$(mktemp -d)
+        echo "$context_files" | while read f; do
+            [ -n "$f" ] && cp "$f" "$temp_context/" 2>/dev/null
+        done
+        
+        # Check total size
+        local total_size=$(du -sh "$temp_context" | awk '{print $1}')
+        log DEBUG "Total context size: $total_size"
+        
+        if kubectl create configmap ${IMAGE_NAME}-context \
+            --from-file=${temp_context} \
             -n ${NAMESPACE} \
-            --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+            --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1; then
+            log DEBUG "Context ConfigMap created successfully"
+        else
+            log WARN "Failed to create context ConfigMap (possibly too large)"
+            log WARN "Building with Dockerfile only, no additional context files"
+            has_context=false
+        fi
+        
+        rm -rf "$temp_context"
     fi
     
     log STEP "Deploying BuildKit pod on Kubernetes (rootless, because we're fancy)..."
@@ -116,7 +151,7 @@ spec:
               [ -f "\$f" ] && [ "\$f" != "Dockerfile" ] && cp "\$f" /workspace/
             done
           fi
-          echo "✓ Workspace ready with $(ls -1 /workspace | wc -l) files"
+          echo "✓ Workspace ready with $(ls -1 /workspace 2>/dev/null | wc -l) files"
         resources:
           requests:
             cpu: "0.1"
@@ -348,19 +383,39 @@ monitor_and_download() {
     log STEP "Downloading your freshly-built OCI image..."
     log DEBUG "Transferring from Kubernetes ephemeral storage to your disk"
     
-    if kubectl cp ${NAMESPACE}/${pod_name}:/output/${output_file} ${local_path} -c build 2>&1 | grep -v "tar: removing"; then
+    # Use a temporary file to capture kubectl cp output
+    local temp_output=$(mktemp)
+    
+    # Run kubectl cp and capture both stdout and stderr
+    if kubectl cp ${NAMESPACE}/${pod_name}:/output/${output_file} ${local_path} -c build 2>&1 | tee "$temp_output" | grep -v "tar: removing" || true; then
+        rm -f "$temp_output"
+    else
+        # If kubectl cp failed, show the actual error
+        local exit_code=$?
+        log DEBUG "kubectl cp exit code: $exit_code"
+        cat "$temp_output" >&2
+        rm -f "$temp_output"
+    fi
+    
+    # Check if download succeeded by verifying the file exists
+    if [ -f "$local_path" ] && [ -s "$local_path" ]; then
         # Signal completion
         kubectl exec $pod_name -c build -n ${NAMESPACE} -- touch /output/download.done 2>/dev/null || true
         
-        if [ -f "$local_path" ] && [ -s "$local_path" ]; then
-            local size=$(ls -lh "$local_path" | awk '{print $5}')
-            log SUCCESS "Image saved: $(basename $local_path) (${size})"
-            return 0
-        fi
+        local size=$(stat -f%z "$local_path" 2>/dev/null | awk '{size=$1/1048576; printf "%.1fM", size}' || echo "unknown")
+        log SUCCESS "Image saved: $(basename $local_path) (${size})"
+        return 0
+    else
+        # Try to understand why it failed
+        log DEBUG "Checking pod status..."
+        kubectl get pod $pod_name -n ${NAMESPACE} -o wide 2>&1 || true
+        
+        log DEBUG "Checking if output file exists in pod..."
+        kubectl exec $pod_name -c build -n ${NAMESPACE} -- ls -la /output/ 2>&1 || true
+        
+        log ERROR "Download failed. The image exists but refuses to leave Kubernetes."
+        return 1
     fi
-    
-    log ERROR "Download failed. The image exists but refuses to leave Kubernetes."
-    return 1
 }
 
 # Validate OCI image
