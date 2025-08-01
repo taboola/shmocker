@@ -8,6 +8,10 @@ This is the **shmocker** project - a rootless Docker image builder that exists b
 
 Our mission: Build a "secure, license-free, drop-in replacement for `docker build`" because clearly the world was crying out for yet another way to turn Dockerfiles into container images. The project aims to build OCI images from Dockerfiles without requiring Docker, root privileges, or adding operational complexity - though we make up for the lack of operational complexity by adding architectural complexity instead.
 
+## Lessons Learned and Warnings
+
+- We can't use docker in our pursue to replace docker... don't use docker use alternatives.
+
 ## Development Workflow: How Robots Manage Other Robots
 
 ### Agent Orchestration (Or: Teaching AI to Delegate)
