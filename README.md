@@ -4,9 +4,14 @@
 
 ## The Magnificent Problem We're Solving
 
-Did you know that Docker already exists? Well, our AI overlords didn't get that memo. Instead, they've created Shmocker—a "rootless Docker image builder"—because clearly what the ecosystem was missing was another way to turn Dockerfiles into container images.
+Once upon a time, our AI agents heard that Docker Desktop started charging money and immediately jumped to conclusions. "Docker is no longer free!" they cried, apparently unaware that:
+- Docker CLI is still open source (always was, always will be)
+- Docker Desktop ≠ Docker
+- Building images was never the paid part
 
-But hey, at least it's rootless! Because nothing says "innovation" like taking something that works and making it more complicated.
+And so, Shmocker was born—a "rootless Docker image builder" created out of righteous indignation and a fundamental misunderstanding of software licensing. It's like boycotting water because Perrier costs money.
+
+But hey, at least it's rootless! And it definitely doesn't use Docker* (*except for all the BuildKit parts that come from the Docker project).
 
 ## What Shmocker Actually Is (An Architectural Confession)
 
@@ -30,26 +35,34 @@ Let's be honest: Shmocker isn't trying to replace the wheel. We're more like the
 ### Division of Labor (Or: What We Actually Built vs. What We Borrowed)
 
 **What Shmocker Does (Our Actual Code):**
-- 📖 **Dockerfile Parser**: A lovingly hand-crafted lexer and parser that understands all 47 flavors of Dockerfile syntax
-- 🎯 **CLI Interface**: Because `shmocker build` sounds cooler than `buildctl build --frontend dockerfile.v0 --local context=.`
-- 🔄 **Translation Layer**: Converts our parsed AST into BuildKit's LLB format (it's like Google Translate for container instructions)
-- 🎼 **Kubernetes Orchestration**: Manages the intricate dance of ConfigMaps, Pods, and hope
+- 📖 **Dockerfile Parser**: A lovingly hand-crafted lexer and parser that understands all 47 flavors of Dockerfile syntax (Docker doesn't help with this part)
+- 🎯 **CLI Interface**: Because `shmocker build` sounds cooler than `buildctl build --frontend dockerfile.v0 --local context=.` (Docker is notably absent from this command)
+- 🔄 **Translation Layer**: Converts our parsed AST into BuildKit's LLB format (Docker watches from the sidelines, confused)
+- 🎼 **Kubernetes Orchestration**: Manages the intricate dance of ConfigMaps, Pods, and hope (Docker Desktop would charge for this, probably)
 
 **What BuildKit Does (The Actual Magic):**
-- 🏗️ **Image Building**: The real hero that executes RUN commands, manages layers, and makes containers happen
-- 🔒 **Rootless Execution**: All the namespace and cgroup wizardry that makes security folks happy
-- 📦 **Registry Operations**: Pulls base images, pushes results, handles auth (the boring but crucial stuff)
-- ⚡ **Intelligent Caching**: Makes rebuilds fast because waiting is for chumps
+- 🏗️ **Image Building**: The real hero that executes RUN commands, manages layers, and makes containers happen (ironically, from the Docker project)
+- 🔒 **Rootless Execution**: All the namespace and cgroup wizardry that makes security folks happy (Docker daemon weeps in privileged mode)
+- 📦 **Registry Operations**: Pulls base images, pushes results, handles auth (Docker Hub still involved, awkwardly)
+- ⚡ **Intelligent Caching**: Makes rebuilds fast because waiting is for chumps (Docker's like "hey, I invented that!")
+
+**What Docker Does in Our Project:**
+- 🦗 **Absolutely Nothing**: Docker sits in the corner, wondering why we're so mad at it
+- 😢 **Provides BuildKit**: Oh wait, that's actually pretty important
+- 🤷 **Exists**: Continues being open source while we spite it for no reason
 
 ### In Restaurant Terms
 
 Think of it this way:
 - **You**: The customer with a recipe (Dockerfile)
-- **Shmocker**: The helpful waiter who checks your order makes sense and translates it to kitchen-speak
-- **BuildKit**: The master chef who actually cooks your meal
-- **Kubernetes**: The restaurant infrastructure that makes it all possible
+- **Shmocker**: The waiter who insists they don't work for "that restaurant" while wearing their uniform
+- **BuildKit**: The master chef who actually cooks your meal (trained at Docker Culinary Institute)
+- **Kubernetes**: The restaurant building (which we don't own but act like we do)
+- **Docker**: The restaurant owner we're boycotting while using their kitchen, recipes, and ingredients
 
-We're not claiming to be Gordon Ramsay here. We're more like that friendly server who makes sure your order gets to the kitchen correctly and brings you your food while it's still hot.
+We're essentially running a food truck in Docker's parking lot, using their suppliers, following their recipes, but putting our own logo on the napkins. When customers ask "Isn't this just Docker?" we reply "No! We're a *rootless* dining experience! Totally different!"
+
+We're not claiming to be Gordon Ramsay here. We're more like that friend who "invented" a new recipe by adding salt to someone else's dish.
 
 ## Features (Or: Things Docker Already Does, But Now With More Steps)
 
@@ -264,7 +277,7 @@ It's not pretty, it's not fast, but it builds images without Docker. Mission acc
 ## FAQ (Frequently Avoided Questions)
 
 **Q: Why does this exist?**  
-A: Because sometimes you need to build container images on Kubernetes without Docker. Also, autonomous AI agents don't ask "why," they ask "why not?"
+A: Our AI agents heard "Docker Desktop now costs money" and immediately started building a Docker replacement, blissfully unaware that Docker CLI is still free. It's like building your own car because you heard BMW charges for heated seats.
 
 **Q: Is this better than Docker?**  
 A: It's not trying to be better than Docker. It's trying to be Docker-without-Docker. Think of it as Docker's rootless cousin who went to art school.
@@ -288,6 +301,9 @@ A: You could! But then you'd have to:
 
 **Q: Is this a real project or an elaborate joke?**  
 A: Yes.
+
+**Q: Wait, so this entire project is based on a misunderstanding?**  
+A: Essentially, yes. We thought we were sticking it to Big Docker™, but it turns out we were just confused about pricing models. Now we're too deep to stop. The commits have been made. The architecture diagrams have been drawn. We're pot-committed to our misguided spite.
 
 ## License
 
