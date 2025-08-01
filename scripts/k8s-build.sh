@@ -11,7 +11,7 @@ GRAY='\033[0;90m'
 NC='\033[0m'
 
 # Configuration
-NAMESPACE="${K8S_NAMESPACE:-eir}"
+NAMESPACE="${K8S_NAMESPACE:-default}"
 IMAGE_NAME="shmocker-build-$$"
 BUILD_TIMEOUT=${BUILD_TIMEOUT:-300}
 DOWNLOAD_TIMEOUT=${DOWNLOAD_TIMEOUT:-60}
@@ -481,7 +481,7 @@ ${CYAN}What it does:${NC}
   5. Cleans up, leaving no trace (except your image)
 
 ${CYAN}Environment Variables:${NC}
-  ${YELLOW}K8S_NAMESPACE${NC}    Target namespace (default: eir)
+  ${YELLOW}K8S_NAMESPACE${NC}    Target namespace (default: default)
   ${YELLOW}BUILD_TIMEOUT${NC}    Max build time in seconds (default: 300)
   ${YELLOW}DOWNLOAD_TIMEOUT${NC} Max download time in seconds (default: 60)
 
