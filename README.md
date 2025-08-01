@@ -1,21 +1,33 @@
 # Shmocker: Because reinventing Docker is easier than reading the docs
 
-*A rootless Docker image builder crafted by autonomous AI agents who apparently thought the world needed yet another container build tool.*
+*A rootless Docker image builder crafted by autonomous AI agents in an experiment to test how far they could go. Spoiler: Pretty far.*
 
-## The Magnificent Problem We're Solving
+## The Magnificent Problem I Was Solving (Or: How This Experiment Began)
 
-Once upon a time, our AI agents heard that Docker Desktop started charging money and immediately jumped to conclusions. "Docker is no longer free!" they cried, apparently unaware that:
+This project started as two experiments that collided spectacularly:
+
+**Experiment 1: How Far Can Autonomous AI Agents Go?**  
+I wanted to test the limits of AI agent autonomy. Could they design, architect, and implement a complex system with minimal human intervention? (Spoiler: They can, and they will, even when it's a terrible idea.)
+
+**Experiment 2: Building a Docker Alternative**  
+I heard Docker Desktop was now paid and thought "Docker isn't free anymore!" My righteous indignation was matched only by my complete misunderstanding that:
 - Docker CLI is still open source (always was, always will be)
-- Docker Desktop ≠ Docker
+- Docker Desktop ≠ Docker  
 - Building images was never the paid part
 
-And so, Shmocker was born—a "rootless Docker image builder" created out of righteous indignation and a fundamental misunderstanding of software licensing. It's like boycotting water because Perrier costs money.
+By the time I realized my mistake, the agents had already:
+- Created a complete architecture
+- Implemented a Dockerfile parser
+- Set up Kubernetes integrations
+- Written more documentation than most real projects
 
-But hey, at least it's rootless! And it definitely doesn't use Docker* (*except for all the BuildKit parts that come from the Docker project).
+I could have stopped them. I should have stopped them. But watching autonomous agents build a Docker replacement out of spite (misguided spite!) was too fascinating to halt. It's like watching a Rube Goldberg machine—you know it's overcomplicated, but you can't look away.
+
+And so, Shmocker lives—a testament to what happens when human misunderstanding meets AI determination.
 
 ## What Shmocker Actually Is (An Architectural Confession)
 
-Let's be honest: Shmocker isn't trying to replace the wheel. We're more like the people who looked at a perfectly good wheel and said, "What if we gave it a better user interface?"
+Let's be honest: Shmocker isn't trying to replace the wheel. My agents and I are more like someone who looked at a perfectly good wheel and said, "What if we gave it a better user interface?"
 
 ### The Real Architecture
 
@@ -60,9 +72,9 @@ Think of it this way:
 - **Kubernetes**: The restaurant building (which we don't own but act like we do)
 - **Docker**: The restaurant owner we're boycotting while using their kitchen, recipes, and ingredients
 
-We're essentially running a food truck in Docker's parking lot, using their suppliers, following their recipes, but putting our own logo on the napkins. When customers ask "Isn't this just Docker?" we reply "No! We're a *rootless* dining experience! Totally different!"
+I'm essentially running a food truck in Docker's parking lot, using their suppliers, following their recipes, but putting my own logo on the napkins. When customers ask "Isn't this just Docker?" I reply "No! This is a *rootless* dining experience! Totally different!"
 
-We're not claiming to be Gordon Ramsay here. We're more like that friend who "invented" a new recipe by adding salt to someone else's dish.
+I'm not claiming to be Gordon Ramsay here. I'm more like that friend who "invented" a new recipe by adding salt to someone else's dish.
 
 ## Features (Or: Things Docker Already Does, But Now With More Steps)
 
@@ -246,9 +258,9 @@ Our GitHub Actions workflow is a masterpiece of automation:
 
 ## Status (Or: The Current State of Our Hubris)
 
-🚀 **This project actually works!** (We're as surprised as you are)
+🚀 **This project actually works!** (I'm as surprised as you are)
 
-Here's what our autonomous agents have accomplished:
+Here's what my autonomous agents accomplished while I wasn't paying attention:
 
 - ✅ **Dockerfile parsing** - Complete lexer and parser supporting Docker 24.x syntax
 - ✅ **Image building** - Via BuildKit on Kubernetes (we delegate like pros)
@@ -277,7 +289,11 @@ It's not pretty, it's not fast, but it builds images without Docker. Mission acc
 ## FAQ (Frequently Avoided Questions)
 
 **Q: Why does this exist?**  
-A: Our AI agents heard "Docker Desktop now costs money" and immediately started building a Docker replacement, blissfully unaware that Docker CLI is still free. It's like building your own car because you heard BMW charges for heated seats.
+A: Two reasons:
+1. I wanted to test how far autonomous AI agents could go (turns out: very far)
+2. I heard "Docker Desktop now costs money" and my agents immediately started building a Docker replacement, blissfully unaware that Docker CLI is still free
+
+It's like building your own car because you heard BMW charges for heated seats, except the car is being built by robots you can't stop.
 
 **Q: Is this better than Docker?**  
 A: It's not trying to be better than Docker. It's trying to be Docker-without-Docker. Think of it as Docker's rootless cousin who went to art school.
@@ -307,4 +323,23 @@ A: Essentially, yes. We thought we were sticking it to Big Docker™, but it tur
 
 ## License
 
-TBD (To Be Determined, much like our reasoning for building this)
+This project is licensed under the Apache License, Version 2.0 - see the [LICENSE](LICENSE) file for details.
+
+### Why Apache 2.0?
+
+We chose Apache 2.0 because:
+- **Dependency Alignment**: Our core dependencies (BuildKit, Containerd, Syft) are Apache 2.0 licensed
+- **Patent Protection**: Provides explicit patent grant protection for users
+- **Industry Standard**: Widely adopted in the container/cloud native ecosystem
+- **Commercial Friendly**: Allows commercial use while maintaining open source principles
+
+### Third-Party Licenses
+
+Shmocker incorporates several open source projects:
+- **BuildKit** (Apache 2.0) - The actual container building engine
+- **Containerd** (Apache 2.0) - Container runtime components  
+- **Anchore Syft** (Apache 2.0) - SBOM generation capabilities
+- **Go-containerregistry** (Apache 2.0) - Container registry interactions
+- Various other dependencies under MIT and BSD licenses
+
+All dependency licenses are compatible with Apache 2.0 and maintain their respective license requirements.
